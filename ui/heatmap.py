@@ -1,6 +1,6 @@
 import streamlit as st
 
-from config import PALETTE, ROOT
+from config import PALETTE, PALETTE_TEXT, ROOT
 
 _component = st.components.v2.component(
     'crew_demand_heatmap', html='<div class="heatmap" role="region" aria-label="조업조 수요 히트맵"></div>',
@@ -17,7 +17,7 @@ def display(result):
     selection = st.session_state.get('cell_selection', 0)
     data = dict(headers=headers, values=values,
                 rows=[result.cells[i].operating_day.isoformat() for i in range(0, len(result.cells), n)],
-                daily=result.daily_max, maximum=result.maximum, selected=selection, palette=PALETTE)
+                daily=result.daily_max, maximum=result.maximum, selected=selection, palette=PALETTE, textPalette=PALETTE_TEXT)
     event = _component(data=data, default={'selection': selection}, key='heatmap_' + result.result_id,
                        on_selection_change=lambda: None)
     selected = event.selection

@@ -13,7 +13,7 @@ def test_url_roundtrip_all_settings():
     assert not error and restored==s
 
 
-@pytest.mark.parametrize('params',[{'v':'99'},{'dep':'1,2'},{'interval':'1'},{'airport':'../../x'},{'airlines':'ESR,<script>'},{'start':'2026-01-01','end':'2026-12-31'},{'start':'9999-12-01','end':'9999-12-31'}])
+@pytest.mark.parametrize('params',[{'v':'99'},{'v':'1','airlines':'JJA'},{'dep':'1,2'},{'interval':'1'},{'airport':'../../x'},{'airlines':'ESR,<script>'},{'airlines':'ZZ'},{'start':'2026-01-01','end':'2026-12-31'},{'start':'9999-12-01','end':'9999-12-31'}])
 def test_invalid_urls_safe_fallback(params):
     s,error=decode(params,date(2026,10,27))
     assert error and s.airport=='RKSI'

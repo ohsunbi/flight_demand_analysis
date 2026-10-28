@@ -80,12 +80,35 @@ def analyze(settings: Settings, flights: tuple[Flight, ...], diagnostics: Diagno
                     not blockers, tuple(blockers), synthetic)
 
 
+def half_day_peaks(result: Analysis):
+    """Return AM/PM maxima and tied calendar dates, split at KST noon/midnight."""
+    maxima = [0, 0]
+    dates = [set(), set()]
+    for segment in result.segments:
+        cursor = segment.start.astimezone(KST)
+        end = segment.end.astimezone(KST)
+        while cursor < end:
+            half = int(cursor.hour >= 12)
+            boundary = cursor.replace(hour=12 if half == 0 else 0, minute=0, second=0, microsecond=0)
+            if half:
+                boundary += timedelta(days=1)
+            if segment.total > maxima[half]:
+                maxima[half] = segment.total
+                dates[half] = {cursor.date()}
+            elif segment.total == maxima[half] and segment.total > 0:
+                dates[half].add(cursor.date())
+            cursor = min(end, boundary)
+    return tuple((maximum, tuple(sorted(days))) for maximum, days in zip(maxima, dates))
+
+
 def cell_flights(result: Analysis, index: int, kind: str):
     cell = result.cells[index]
     if kind == 'peak':
         return tuple(f for f in result.flights if cell.peak is not None and f.start <= cell.peak < f.reusable)
     if kind == 'overlap':
         return tuple(f for f in result.flights if f.start < cell.end and f.reusable > cell.start and f.start < f.reusable)
+    if kind == 'work':
+        return tuple(f for f in result.flights if f.start < cell.end and f.end > cell.start and f.start < f.end)
     if kind == 'reference':
         return tuple(f for f in result.flights if cell.start <= f.reference < cell.end)
     raise ValueError('Unknown detail kind')

@@ -16,10 +16,10 @@ if __name__=='__main__':
     (target/'actual.pdf').write_bytes(files['pdf'])
     doc=pymupdf.open(stream=files['pdf'],filetype='pdf')
     text='\n'.join(page.get_text() for page in doc)
-    assert '날짜 추정' in text and str(result.diagnostics.actual_date_inferred) in text
+    assert '실제 (RAMP IN/OUT, 없으면 계획)' in text
     for page in doc:
-        assert 840<page.rect.width<843 and 594<page.rect.height<597
+        assert 594<page.rect.width<597 and 840<page.rect.height<843
         for font in page.get_fonts():
             assert doc.extract_font(font[0])[3], 'Font must be embedded'
     doc[0].get_pixmap(matrix=pymupdf.Matrix(1.6,1.6)).save(target/'actual_page_1.png')
-    print('Live actual report: inference count, A4 dimensions, embedded fonts passed')
+    print('Live actual report: basis, portrait A4 dimensions, embedded fonts passed')

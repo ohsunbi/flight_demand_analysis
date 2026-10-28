@@ -14,7 +14,8 @@ AIRPORTS = {
     'RKTH': ('포항', 'KPO'), 'RKPS': ('사천', 'HIN'), 'RKJB': ('무안', 'MWX'),
     'RKTL': ('울진', ''),
 }
-PALETTE = ['#f1f5f9', '#d8eeef', '#a7d7d7', '#65b4bc', '#308994', '#17636e', '#123e4c']
+PALETTE = ['#f3f4f6', '#c9ead6', '#75c69a', '#f5df88', '#f8b375', '#e66b55', '#a92727']
+PALETTE_TEXT = ['#242424'] * 6 + ['#ffffff']
 
 
 def color_index(value, maximum):

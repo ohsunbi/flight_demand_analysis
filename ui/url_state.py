@@ -2,17 +2,18 @@ import calendar
 from datetime import date
 
 from domain.models import Offsets, Settings
+from config.airline_codes import parse_iata_codes, to_iata_codes
 
 
 def defaults(today):
-    return Settings('RKSI', today.replace(day=1), today.replace(day=calendar.monthrange(today.year, today.month)[1]))
+    return Settings('RKSI', today.replace(day=1), today.replace(day=calendar.monthrange(today.year, today.month)[1]), airlines=('JJA',))
 
 
 def encode(settings):
     settings.validate()
-    return dict(v='1', airport=settings.airport, mode=settings.mode,
+    return dict(v='2', airport=settings.airport, mode=settings.mode,
                 start=settings.start.isoformat(), end=settings.end.isoformat(),
-                airlines=','.join(settings.airlines), basis=settings.basis,
+                airlines=','.join(to_iata_codes(settings.airlines)), basis=settings.basis,
                 day_start=str(settings.day_start), interval=str(settings.interval),
                 dep=','.join(str(v) for v in (settings.dep.start, settings.dep.end, settings.dep.reusable)),
                 arr=','.join(str(v) for v in (settings.arr.start, settings.arr.end, settings.arr.reusable)))
@@ -24,7 +25,7 @@ def decode(params, today):
     try:
         if sum(len(str(k)) + len(str(v)) for k, v in params.items()) > 4096:
             raise ValueError('설정 URL이 너무 깁니다.')
-        if params.get('v', '1') != '1':
+        if params.get('v', '2') != '2':
             raise ValueError('지원하지 않는 설정 URL 버전입니다.')
         base = encode(defaults(today))
         base.update({k: str(v) for k, v in params.items() if k in base})
@@ -32,7 +33,7 @@ def decode(params, today):
             values = [int(v) for v in base[key].split(',')]
             return Offsets(*values)
         result = Settings(base['airport'], date.fromisoformat(base['start']), date.fromisoformat(base['end']),
-                          base['mode'], tuple(sorted(set(c.strip().upper() for c in base['airlines'].split(',') if c.strip()))),
+                          base['mode'], parse_iata_codes(base['airlines'], allow_empty=True),
                           base['basis'], int(base['day_start']), int(base['interval']), offsets('dep'), offsets('arr'))
         result.validate()
         return result, None

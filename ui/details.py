@@ -2,36 +2,66 @@ import pandas as pd
 import streamlit as st
 
 from engine.demand import cell_flights
+from config.airport_codes import icao_to_iata
+from config.airline_codes import ICAO_TO_IATA
 
 
 def fmt(value):
-    return value.strftime('%m-%d %H:%M') if value else '—'
+    return value.strftime('%H:%M') if value else '—'
+
+
+def flight_label(flight_id):
+    candidates = ICAO_TO_IATA.get(flight_id[:3], ())
+    if len(flight_id) > 3 and len(candidates) == 1:
+        return candidates[0] + flight_id[3:]
+    return flight_id
 
 
 def frame(flights):
     return pd.DataFrame([{
-        '방향': '출발' if f.direction == 'dep' else '도착', '편명': f.flight_id,
-        '조회 항공사': ', '.join(f.query_airlines) or '전체',
-        '상대 공항': f.route, '예정': fmt(f.scheduled), '실제 주기장': fmt(f.actual),
-        '주기장 원본 시각': f.actual_clock,
-        '선택 기준': fmt(f.reference), '사용 시각': {'actual':'실제', 'actual_inferred':'실제·날짜 추정', 'fallback':'예정 대체', 'scheduled':'예정'}[f.reference_source],
-        '조업 시작': fmt(f.start), '조업 종료': fmt(f.end), '재투입': fmt(f.reusable),
-        '주의': ' · '.join(f.warnings),
+        '방향': '출발' if f.direction == 'dep' else '도착', '편명': flight_label(f.flight_id),
+        '출도착지': icao_to_iata(f.route),
+        'STA/STD': f.scheduled.strftime('%H:%M') if f.scheduled else '—',
+        'RAMP I/O': f.actual.strftime('%H:%M') if f.actual else '—',
+        '조업 시작': fmt(f.start), '조업 종료': fmt(f.end),
+        '후속 조업 가능': fmt(f.reusable),
     } for f in flights])
 
 
 def display(result, index):
+    with st.container(key='cell_details'):
+        _display(result, index)
+
+
+def _display(result, index):
     cell = result.cells[index]
-    st.subheader('시간대 상세')
-    st.caption(f'운영일 {cell.operating_day} · {cell.start:%m-%d %H:%M} ~ {cell.end:%m-%d %H:%M}')
-    st.metric('최대 필요 조업조', f'{cell.maximum}개 조')
-    st.write(f'대표 피크 **{fmt(cell.peak)}** · 출발 **{cell.dep_active}** / 도착 **{cell.arr_active}**')
-    st.caption(f'기준시각에 따른 편수: 출발 {cell.dep_count}편 · 도착 {cell.arr_count}편')
-    tabs = st.tabs(['피크 점유', '점유 겹침', '기준시각'])
-    for tab, kind in zip(tabs, ['peak', 'overlap', 'reference']):
+    end_label = cell.end.strftime('%H:%M' if cell.end.date() == cell.start.date() else '%m/%d %H:%M')
+    st.html(f'''<style>
+.st-key-cell_details [data-testid="stVerticalBlock"] {{gap:.5rem}}
+.detail-summary {{display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 16px; margin:0 0 8px; color:#242424}}
+.detail-summary-label {{font-size:14px; line-height:1.5; color:#59514c}}
+.detail-summary-value {{font-size:clamp(20px,1.6vw,26px); font-weight:700; line-height:1.35; overflow-wrap:anywhere}}
+.detail-summary-right {{text-align:right}}
+.detail-summary-demand {{color:#c2410c; white-space:nowrap}}
+</style>
+<div class="detail-summary">
+<div class="detail-summary-label">{cell.start:%m/%d}</div>
+<div class="detail-summary-label detail-summary-right">필요 조 개수</div>
+<div class="detail-summary-value">{cell.start:%H:%M}–{end_label}</div>
+<div class="detail-summary-value detail-summary-right detail-summary-demand">{cell.maximum}개 조</div>
+</div>''')
+    peak_label = cell.peak.strftime('%H:%M') if cell.peak else '없음'
+    st.write(f'피크 시간 **{peak_label}** · 출발편 **{cell.dep_active}개 조** / 도착편 **{cell.arr_active}개 조**')
+    work_flights = cell_flights(result, index, 'work')
+    dep_count = sum(f.direction == 'dep' for f in work_flights)
+    arr_count = sum(f.direction == 'arr' for f in work_flights)
+    st.caption(f'해당 시간대 조업 편수 · 출발 {dep_count}편 / 도착 {arr_count}편',
+               help='조업 시작부터 종료 직전까지가 선택한 시간대와 겹치는 편수입니다. 이동시간은 제외합니다. 한 편이 여러 시간대에 포함될 수 있으며, 필요 조 개수에는 이동시간도 포함됩니다.')
+    interval_label = '1시간 기준' if result.settings.interval == 60 else '30분 기준'
+    tabs = st.tabs(['피크 시간 기준', interval_label])
+    for tab, kind in zip(tabs, ['peak', 'work']):
         with tab:
             flights = cell_flights(result, index, kind)
-            st.caption(f'{len(flights)}편 · 목록을 가로로 스크롤하면 조업시각을 확인할 수 있습니다.')
             if flights:
                 st.dataframe(frame(flights), hide_index=True, width='stretch', height=350)
             else:

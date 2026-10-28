@@ -1,10 +1,15 @@
-.heatmap { overflow: auto; max-height: 710px; border: 1px solid #dce5ea; border-radius: 10px; font-family: var(--st-font, sans-serif); }
-table { border-collapse: separate; border-spacing: 2px; width: 100%; font-size: 11px; }
-th { white-space: nowrap; padding: 8px 5px; font-weight: 600; color: var(--st-text-color, #213c48); }
-thead th { position: sticky; top: 0; background: var(--st-background-color, white); z-index: 2; font-size: 10px; }
-tbody th { position: sticky; left: 0; background: var(--st-background-color, white); z-index: 1; text-align: left; font-size: 11px; }
-td { padding: 0; min-width: 29px; }
-button { cursor: pointer; width: 100%; min-width: 29px; height: 30px; border: 2px solid transparent; border-radius: 4px; font-size: 12px; font-weight: 600; }
+.heatmap { overflow: auto; max-height: 710px; border: 1px solid #ded8d3; border-radius: 10px; font-family: var(--st-font, sans-serif); }
+table { border-collapse: separate; border-spacing: 1px 2px; width: 100%; font-size: 11px; }
+th { white-space: nowrap; padding: 8px 5px; font-weight: 600; color: var(--st-text-color, #242424); }
+thead th { position: sticky; top: 0; background: #f3f2f0; z-index: 2; font-size: 13px; padding: 12px 2px; text-align: center; }
+thead th:first-child { left: 0; z-index: 3; }
+.time-hour { display: block; font-size: 16px; font-weight: 700; line-height: 1.5; color: #242424; }
+.time-hour sup { font-size: 9px; margin-left: 2px; }
+.time-minute { display: block; font-size: 12px; font-weight: 500; line-height: 1.5; color: #59514c; }
+tbody th { position: sticky; left: 0; background: #f7f6f4; z-index: 1; text-align: left; font-size: 14px; font-weight: 700; padding: 10px 12px; }
+td { padding: 0; min-width: 32px; }
+.hour-boundary { border-left: 1px solid #ded8d3; }
+button { cursor: pointer; width: 100%; min-width: 32px; height: 32px; border: 2px solid transparent; border-radius: 4px; font-size: 12px; font-weight: 600; }
 button:hover { filter: brightness(.92); }
-button:focus-visible, button[aria-pressed=true] { border-color: #f2994a; outline: 1px solid #f2994a; }
-.daily { text-align: center; padding: 5px; font-size: 13px; font-weight: 700; color: var(--st-text-color, #123e4c); }
+button:focus-visible, button[aria-pressed=true] { border-color: #242424; outline: 1px solid #fff; outline-offset: -3px; }
+.daily { text-align: center; padding: 5px; font-size: 13px; font-weight: 700; color: var(--st-text-color, #242424); }

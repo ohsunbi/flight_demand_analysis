@@ -4,7 +4,7 @@ import random
 import pytest
 
 from domain.models import Diagnostics, Flight, KST, Offsets, Settings
-from engine.demand import analyze, cell_flights
+from engine.demand import analyze, cell_flights, half_day_peaks
 
 BASE = datetime(2026,10,26,tzinfo=KST)
 
@@ -21,6 +21,48 @@ def flight(key,start,end,direction='dep',reference=None):
 
 def run(fs, s=None):
     return analyze(s or settings(),tuple(fs),Diagnostics(),BASE,BASE)
+
+
+@pytest.mark.parametrize('interval', [30, 60])
+def test_work_flights_exclude_travel_and_exact_boundaries(interval):
+    from dataclasses import replace
+    end=180+interval
+    travel_only=replace(flight('travel',170,200),end=BASE+timedelta(minutes=180))
+    zero_work=replace(flight('zero',180,200),end=BASE+timedelta(minutes=180))
+    r=run([travel_only,zero_work,flight('working',190,end+10,'arr'),
+           flight('next',end,end+10),flight('spanning',170,end+10)],settings(interval=interval))
+    index=180//interval
+    assert {f.key for f in cell_flights(r,index,'work')}=={'working','spanning'}
+    assert 'travel' in {f.key for f in cell_flights(r,index,'overlap')}
+
+
+def test_movement_can_require_crew_without_work_flights():
+    from dataclasses import replace
+    f=replace(flight('travel',170,200),end=BASE+timedelta(minutes=180))
+    r=run([f])
+    assert not cell_flights(r,3,'work')
+    assert r.cells[3].maximum==1
+
+
+def test_half_day_peaks_split_noon_inside_cell():
+    r=run([flight(1,710,720),flight(2,715,735),flight(3,720,740),flight(4,725,730)],settings(day_start=30))
+    assert half_day_peaks(r)==((2,(BASE.date(),)),(3,(BASE.date(),)))
+
+
+def test_half_day_peaks_calendar_dates_ties_and_midnight():
+    s=Settings('RKSI',BASE.date(),BASE.date()+timedelta(days=1),mode='custom',day_start=360)
+    r=run([flight(1,1430,1450),flight(2,1450,1460),flight(3,2160,2170)],s)
+    assert half_day_peaks(r)==((1,(BASE.date()+timedelta(days=1),)),
+                              (1,(BASE.date(),BASE.date()+timedelta(days=1))))
+
+
+def test_half_day_zero_has_no_peak_dates():
+    assert half_day_peaks(run([]))==((0,()),(0,()))
+
+
+def test_half_day_noon_end_excluded_and_zero_length_ignored():
+    r=run([flight(1,700,720),flight(2,720,720)])
+    assert half_day_peaks(r)==((1,(BASE.date(),)),(0,()))
 
 
 def test_nonconcurrent_direction_maxima():
