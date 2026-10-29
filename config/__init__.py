@@ -7,12 +7,12 @@ MAX_QUERY_TASKS = 400
 MAX_PAGES = 200
 MAX_OFFSET_MINUTES = 7 * 24 * 60
 AIRPORTS = {
-    'RKSI': ('인천', 'ICN'), 'RKSS': ('김포', 'GMP'), 'RKTU': ('청주', 'CJJ'),
-    'RKNY': ('양양', 'YNY'), 'RKJK': ('군산', 'KUV'), 'RKNW': ('원주', 'WJU'),
-    'RKPC': ('제주', 'CJU'), 'RKPK': ('김해', 'PUS'), 'RKTN': ('대구', 'TAE'),
+    'RKSI': ('인천', 'ICN'), 'RKSS': ('김포', 'GMP'), 'RKPC': ('제주', 'CJU'),
+    'RKPK': ('김해', 'PUS'), 'RKTN': ('대구', 'TAE'), 'RKTU': ('청주', 'CJJ'),
+    'RKJB': ('무안', 'MWX'),
     'RKJJ': ('광주', 'KWJ'), 'RKJY': ('여수', 'RSU'), 'RKPU': ('울산', 'USN'),
-    'RKTH': ('포항', 'KPO'), 'RKPS': ('사천', 'HIN'), 'RKJB': ('무안', 'MWX'),
-    'RKTL': ('울진', ''),
+    'RKTH': ('포항', 'KPO'), 'RKPS': ('사천', 'HIN'), 'RKJK': ('군산', 'KUV'),
+    'RKNW': ('원주', 'WJU'), 'RKNY': ('양양', 'YNY'), 'RKTL': ('울진', ''),
 }
 PALETTE = ['#f3f4f6', '#c9ead6', '#75c69a', '#f5df88', '#f8b375', '#e66b55', '#a92727']
 PALETTE_TEXT = ['#242424'] * 6 + ['#ffffff']
