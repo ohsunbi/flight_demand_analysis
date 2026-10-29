@@ -48,7 +48,7 @@ def _figure(result, col_start, col_end):
         fig.add_artist(Rectangle((x/width,1-(y+h)/height),w/width,h/height,
                                 transform=fig.transFigure,facecolor=fill,edgecolor=edge,linewidth=.6))
     renderer = FigureCanvasAgg(fig).get_renderer()
-    def inline(y, parts, size=8):
+    def inline(x, y, parts, available, size=8.5):
         """Fit a single row, preserving bold labels and measured spacing."""
         def part_width(value, bold, font_size):
             prop=fp.copy()
@@ -56,10 +56,10 @@ def _figure(result, col_start, col_end):
             prop.set_weight('bold' if bold else 'normal')
             return renderer.get_text_width_height_descent(value,prop,False)[0]*72/fig.dpi
         total=sum(part_width(value,bold,size) for value,bold in parts)
-        size=min(size,size*(width-2*margin)/max(total,1))
-        x=margin
+        size=min(size,size*available/max(total,1))
         for value,bold in parts:
-            text(x,y,value,size=size,weight='bold' if bold else 'normal')
+            text(x,y,value,size=size,weight='bold' if bold else 'normal',
+                 color='#68625e' if bold else '#242424')
             x+=part_width(value,bold,size)
     margin=28
     airport,iata=AIRPORTS[s.airport]
@@ -87,26 +87,38 @@ def _figure(result, col_start, col_end):
     text(x+12,card_y+9,'출발 / 도착 편수',size=9)
     dep=sum(c.dep_count for c in result.cells); arr=sum(c.arr_count for c in result.cells)
     text(x+card_w-12,card_y+card_h-10,f'{dep:,} / {arr:,}편',size=16,color='#c2410c',weight='bold',ha='right',va='bottom')
-    basis='계획 (STA/STD)' if s.basis=='scheduled' else '실제 (RAMP IN/OUT, 없으면 계획)'
+    basis='STD/STA' if s.basis=='scheduled' else 'Ramp OUT/IN'
     clock=f'{s.day_start//60:02d}:{s.day_start%60:02d}'
-    conditions=f'{basis}  ·  {s.interval}분 간격  ·  하루 {clock} ~ 다음 날 {clock}'
+    conditions=[('출도착 시간 기준  ',True),(basis,False),
+                ('    |    집계 간격  ',True),(f'{s.interval}분',False),
+                ('    |    일일 분석 시간대  ',True),(f'{clock} ~ 다음 날 {clock}',False)]
     def offset_label(minutes):
         return '기준시각' if minutes==0 else f'{abs(minutes)}분 {"전" if minutes<0 else "후"}'
     n=1440//s.interval
     cells=[result.cells[r*n+col_start:r*n+col_end] for r in range(s.days)]
     first,last=cells[0][0],cells[0][-1]
     end_time='24:00' if last.end.hour==last.end.minute==0 else last.end.strftime('%H:%M')
+    # Three compact rows share the summary cards' outer edges.
+    condition_y = card_y + 68
+    box(margin, condition_y, width-2*margin, 64, fill='#ffffff', edge='#ded8d3')
+    box(margin, condition_y, 70, 64, edge='#ded8d3')
+    text(margin+35, condition_y+32, '분석 조건', size=9, ha='center', va='center')
+    content_x = margin+82
+    content_width = width-margin-12-content_x
+    inline(content_x, condition_y+10, conditions, content_width)
+    for i,(name,value,reference) in enumerate((('출발편',s.dep,'STD' if s.basis=='scheduled' else 'Ramp OUT'),
+                                             ('도착편',s.arr,'STA' if s.basis=='scheduled' else 'Ramp IN'))):
+        row_y = condition_y+28+i*17
+        inline(content_x, row_y, [(name+'   조업 시간  ',True),
+               (f'{reference} {offset_label(value.start)} ~ {reference} {offset_label(value.end)}',False),
+               ('  |  조업 후 이동시간  ',True),(f'{value.reusable-value.end}분 적용',False)], content_width)
+    # Keep page scope and actual-time fallback separate from the three condition rows.
     if s.interval==30:
-        conditions+=f'  ·  이 페이지 {first.start:%H:%M} ~ {end_time}'
-    inline(card_y+72,[(conditions,False)])
-    parts=[]
-    for i,(name,value,reference) in enumerate((('출발편',s.dep,'STD' if s.basis=='scheduled' else 'RAMP OUT'),
-                                             ('도착편',s.arr,'STA' if s.basis=='scheduled' else 'RAMP IN'))):
-        if i:
-            parts.append(('   |   ',False))
-        parts.extend([(name,True),(f'  {reference} {offset_label(value.start)}부터 {offset_label(value.end)}까지 · 이동 {value.reusable-value.end}분',False)])
-    inline(card_y+92,parts,size=8.5)
-    table_top=card_y+148
+        text(width-margin, condition_y+72, f'이 페이지 시간대  {first.start:%H:%M} ~ {end_time}',
+             size=7.5, color='#68625e', ha='right')
+    if s.basis=='actual':
+        text(margin, condition_y+72, '실제시각이 없는 편은 STD/STA 적용', size=7.5, color='#68625e')
+    table_top=card_y+(184 if s.interval==30 or s.basis=='actual' else 166)
     table_height=min(height-table_top-24,s.days*28)
     ax = fig.add_axes([.12, 1-(table_top+table_height)/height, .83, table_height/height])
     values = [[c.maximum for c in row] for row in cells]

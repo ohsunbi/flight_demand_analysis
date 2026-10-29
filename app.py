@@ -273,8 +273,8 @@ with left:
     title_col.subheader('시간대별 조업조 수요')
     from reports.render import lazy_download, output_stem
     saved_exports = st.session_state.get('export_cache')
-    if saved_exports is None or saved_exports[0] != result.result_id or len(saved_exports) < 3 or saved_exports[2] != 'unified-a4-v4':
-        saved_exports = (result.result_id, {}, 'unified-a4-v4')
+    if saved_exports is None or saved_exports[0] != result.result_id or len(saved_exports) < 3 or saved_exports[2] != 'unified-a4-v8':
+        saved_exports = (result.result_id, {}, 'unified-a4-v8')
         st.session_state.export_cache = saved_exports
     export_disabled = not result.exportable or settings is None
     stem = output_stem(result)
