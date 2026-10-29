@@ -26,6 +26,17 @@ def test_report_contains_whole_day_and_period():
         assert all(Image.open(BytesIO(archive.read(name))).height > 2000 for name in archive.namelist())
 
 
+def test_report_airlines_use_display_codes_without_changing_selected_codes():
+    from reports.render import build_export
+    settings = Settings('RKSI',date(2026,10,26),date(2026,10,26),mode='custom',
+                        airlines=('FDX','JJA','TTW','XUM','ZZZ'))
+    result = demo_result(settings)
+    reader = PdfReader(BytesIO(build_export(result,'pdf')))
+    assert '항공사 : 7C, FX, IT, XU, ZZZ' in reader.pages[0].extract_text()
+    assert result.settings.airlines == ('FDX','JJA','TTW','XUM','ZZZ')
+    assert all(f.flight_id[:3] in settings.airlines for f in result.flights)
+
+
 def test_unconfirmed_result_cannot_export():
     r=demo_result(Settings('RKSI',date(2026,10,26),date(2026,10,26),mode='custom'))
     r.exportable=False

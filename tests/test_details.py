@@ -21,7 +21,8 @@ def test_airport_code_display(code, expected):
     ('JJA524M','7C524M'), ('TTW123','IT123'), ('AXM12A','AK12A'),
     ('HKE123','UO123'), ('CQH123','9C123'), ('CDC123','GJ123'),
     ('CSC123','3U123'), ('RLH123','DR123'), ('7C524M','7C524M'),
-    ('ZZZ123','ZZZ123'), ('ASA123','ASA123'), ('',''), ('JJA','JJA'),
+    ('ZZZ123','ZZZ123'), ('ASA123','AS123'), ('XUM001F','XU001F'),
+    ('JJA-123','JJA-123'), ('jja001a','7C001a'), ('',''), ('JJA','JJA'),
 ])
 def test_flight_label_preserves_suffix_and_unmapped_codes(original, expected):
     assert flight_label(original) == expected

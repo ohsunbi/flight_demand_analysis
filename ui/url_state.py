@@ -2,7 +2,7 @@ import calendar
 from datetime import date
 
 from domain.models import Offsets, Settings
-from config.airline_codes import parse_iata_codes, to_iata_codes
+from config.airline_codes import parse_icao_codes
 
 
 def defaults(today):
@@ -11,9 +11,9 @@ def defaults(today):
 
 def encode(settings):
     settings.validate()
-    return dict(v='2', airport=settings.airport, mode=settings.mode,
+    return dict(v='3', airport=settings.airport, mode=settings.mode,
                 start=settings.start.isoformat(), end=settings.end.isoformat(),
-                airlines=','.join(to_iata_codes(settings.airlines)), basis=settings.basis,
+                airlines=','.join(settings.airlines), basis=settings.basis,
                 day_start=str(settings.day_start), interval=str(settings.interval),
                 dep=','.join(str(v) for v in (settings.dep.start, settings.dep.end, settings.dep.reusable)),
                 arr=','.join(str(v) for v in (settings.arr.start, settings.arr.end, settings.arr.reusable)))
@@ -25,15 +25,17 @@ def decode(params, today):
     try:
         if sum(len(str(k)) + len(str(v)) for k, v in params.items()) > 4096:
             raise ValueError('설정 URL이 너무 깁니다.')
-        if params.get('v', '2') != '2':
+        version = params.get('v', '3')
+        if version != '3':
             raise ValueError('지원하지 않는 설정 URL 버전입니다.')
         base = encode(defaults(today))
         base.update({k: str(v) for k, v in params.items() if k in base})
+        airlines = parse_icao_codes(base['airlines'], allow_empty=True)
         def offsets(key):
             values = [int(v) for v in base[key].split(',')]
             return Offsets(*values)
         result = Settings(base['airport'], date.fromisoformat(base['start']), date.fromisoformat(base['end']),
-                          base['mode'], parse_iata_codes(base['airlines'], allow_empty=True),
+                          base['mode'], airlines,
                           base['basis'], int(base['day_start']), int(base['interval']), offsets('dep'), offsets('arr'))
         result.validate()
         return result, None

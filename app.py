@@ -9,7 +9,7 @@ import pandas as pd
 import streamlit as st
 
 from config import AIRPORTS
-from config.airline_codes import parse_iata_codes, to_iata_codes
+from config.airline_codes import parse_icao_codes, to_iata_codes
 from domain.models import KST, Offsets, Settings
 from engine.demand import half_day_peaks
 from services.analysis import Job, load_contract
@@ -97,8 +97,8 @@ with settings_panel:
         st.html('<h2 class="settings-section-title">조회 대상</h2>')
         airport = st.selectbox('공항', list(AIRPORTS), index=list(AIRPORTS).index(initial.airport),
                                format_func=lambda x: f'{AIRPORTS[x][0]} · {AIRPORTS[x][1] or x} ({x})', key='airport', width=360)
-        codes = st.text_input('항공사 코드', value=','.join(to_iata_codes(initial.airlines)), placeholder='7C, IT, AK', key='codes', width=360,
-                              help='IATA 영문·숫자 2자리 코드로 입력하세요. 여러 항공사는 쉼표로 구분합니다.')
+        codes = st.text_input('항공사 코드 (ICAO 3자리)', value=','.join(initial.airlines), placeholder='JJA, TTW, AXM', key='codes', width=360,
+                              help='ICAO 영문 3자리 코드로 입력하세요. 여러 항공사는 쉼표로 구분합니다. 상세 편명과 보고서에는 대응하는 IATA 2자리 코드를 표시합니다.')
     with period_col:
         st.html('<h2 class="settings-section-title">조회 기간</h2>')
         mode = st.radio('기간 선택', ['month', 'custom'], index=0 if initial.mode == 'month' else 1,
@@ -164,7 +164,7 @@ try:
         raise ValueError(' '.join(invalid_offsets))
     if start is None or end is None:
         raise ValueError('시작일과 종료일을 모두 선택하세요.')
-    airlines = parse_iata_codes(codes)
+    airlines = parse_icao_codes(codes)
     settings = Settings(airport, start, end, mode, airlines, basis, ds, interval, *offsets)
     tasks = plan(settings, actual_query_padding_days=(contract.actual_query_padding_days or 0) if basis == 'actual' else 0)
     params = encode(settings)
@@ -273,8 +273,8 @@ with left:
     title_col.subheader('시간대별 조업조 수요')
     from reports.render import lazy_download, output_stem
     saved_exports = st.session_state.get('export_cache')
-    if saved_exports is None or saved_exports[0] != result.result_id or len(saved_exports) < 3 or saved_exports[2] != 'unified-a4-v8':
-        saved_exports = (result.result_id, {}, 'unified-a4-v8')
+    if saved_exports is None or saved_exports[0] != result.result_id or len(saved_exports) < 3 or saved_exports[2] != 'unified-a4-v9':
+        saved_exports = (result.result_id, {}, 'unified-a4-v9')
         st.session_state.export_cache = saved_exports
     export_disabled = not result.exportable or settings is None
     stem = output_stem(result)

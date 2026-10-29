@@ -30,7 +30,7 @@ def test_analysis_completion_message_tracks_job_outcome(monkeypatch):
     app.run()
     assert not app.exception
     assert any(e.value=='분석이 완료되었습니다. 아래에서 결과를 확인하세요.' for e in app.success)
-    app.text_input(key='codes').set_value('KE').run()
+    app.text_input(key='codes').set_value('KAL').run()
     assert not app.success
     app.button(key='run_analysis').click().run()
     assert not app.success
@@ -76,15 +76,15 @@ def test_initial_app_does_not_fetch_automatically(monkeypatch):
     assert app.radio(key='interval').value==60
     assert not app.text_input(key='codes').disabled
     assert all(r.key != 'airline_mode' for r in app.radio)
-    assert app.text_input(key='codes').value=='7C'
+    assert app.text_input(key='codes').value=='JJA'
     assert all(not b.disabled for b in app.button)
     assert app.radio(key='basis').options==['계획 (STA/STD)', '실제 (RAMP IN/OUT)']
     assert app.selectbox(key='day_start').options==[f'{v//60:02d}:{v%60:02d}' for v in range(0,1440,30)]
     actual=AppTest.from_file('app.py',default_timeout=15)
-    actual.query_params.update(dict(mode='custom',start='2026-10-26',end='2026-10-26',basis='actual',airlines='KE,ZE'))
+    actual.query_params.update(dict(mode='custom',start='2026-10-26',end='2026-10-26',basis='actual',airlines='KAL,ESR'))
     actual.run()
     assert not actual.exception
-    assert actual.text_input(key='codes').value=='KE,ZE'
+    assert actual.text_input(key='codes').value=='ESR,KAL'
     assert not any('조회 단위' in c.value or '주소창 URL' in c.value for c in actual.caption)
     assert [b.label for b in actual.button]==['새로 조회','분석 실행']
     assert not actual.button[0].disabled
@@ -94,7 +94,7 @@ def test_initial_app_does_not_fetch_automatically(monkeypatch):
 def test_invalid_offsets_prevent_analysis(monkeypatch):
     monkeypatch.delenv('CREW_DEMO',raising=False)
     app=AppTest.from_file('app.py',default_timeout=15).run()
-    app.text_input(key='codes').set_value('ZE').run()
+    app.text_input(key='codes').set_value('ESR').run()
     app.number_input(key='dep_start').set_value(100).run()
     assert not app.exception
     assert any('출발편' in e.value and '조업 시작' in e.value for e in app.warning)
@@ -113,9 +113,9 @@ def test_invalid_offsets_prevent_analysis(monkeypatch):
 def test_airline_input_normalization_and_clear_blocks_queries(monkeypatch):
     monkeypatch.delenv('CREW_DEMO',raising=False)
     app=AppTest.from_file('app.py',default_timeout=15).run()
-    app.text_input(key='codes').set_value(' ze, ke, ZE ').run()
+    app.text_input(key='codes').set_value(' esr, kal, ESR ').run()
     assert not app.exception
-    assert app.query_params['airlines']==['KE,ZE']
+    assert app.query_params['airlines']==['ESR,KAL']
     assert all(not b.disabled for b in app.button)
     assert 'job' not in app.session_state
     app.text_input(key='codes').set_value(' , ').run()
@@ -127,11 +127,11 @@ def test_airline_input_normalization_and_clear_blocks_queries(monkeypatch):
 def test_legacy_day_start_restored_and_half_hour_selection(monkeypatch):
     monkeypatch.delenv('CREW_DEMO',raising=False)
     app=AppTest.from_file('app.py',default_timeout=15)
-    app.query_params.update(dict(day_start='195',airlines='KE'))
+    app.query_params.update(dict(day_start='195',airlines='KAL'))
     app.run()
     assert not app.exception
     assert app.selectbox(key='day_start').value==195
-    assert app.text_input(key='codes').value=='KE'
+    assert app.text_input(key='codes').value=='KAL'
     assert app.query_params['day_start']==['195']
     app.selectbox(key='day_start').set_value(360).run()
     assert not app.exception
@@ -150,14 +150,34 @@ def test_explicit_empty_airline_url_blocks_queries(monkeypatch):
     assert 'job' not in app.session_state
 
 
-def test_invalid_iata_input_blocks_web_queries(monkeypatch):
+def test_invalid_icao_input_blocks_web_queries(monkeypatch):
     monkeypatch.delenv('CREW_DEMO',raising=False)
     app=AppTest.from_file('app.py',default_timeout=15).run()
-    for code in ('JJA','ZZ','3S'):
+    for code in ('7C','ZZ','3S','KAL1'):
         app.text_input(key='codes').set_value(code).run()
         assert not app.exception
         assert app.error and all(b.disabled for b in app.button)
         assert 'job' not in app.session_state
+
+
+def test_unlisted_icao_and_unsupported_url_do_not_fetch(monkeypatch):
+    monkeypatch.delenv('CREW_DEMO',raising=False)
+    app = AppTest.from_file('app.py',default_timeout=15).run()
+    app.text_input(key='codes').set_value(' xum, zzz, XUM ').run()
+    assert not app.exception and not app.error
+    assert app.query_params['v'] == ['3']
+    assert app.query_params['airlines'] == ['XUM,ZZZ']
+    assert all(not button.disabled for button in app.button)
+    assert 'job' not in app.session_state
+    legacy = AppTest.from_file('app.py',default_timeout=15)
+    legacy.query_params.update(dict(v='2',airlines='7C,IT'))
+    legacy.run()
+    assert not legacy.exception
+    assert legacy.warning
+    assert legacy.text_input(key='codes').value == 'JJA'
+    assert legacy.query_params['v'] == ['3']
+    assert legacy.query_params['airlines'] == ['JJA']
+    assert 'job' not in legacy.session_state
 
 
 def test_travel_time_drives_reuse_and_demand(monkeypatch):

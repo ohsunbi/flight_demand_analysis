@@ -24,6 +24,18 @@ class Opener:
 def ok(rows,total=None):return dict(status='success',total=len(rows) if total is None else total,records=rows)
 
 
+@pytest.mark.parametrize('code', ['JJA','XUM','ZZZ'])
+def test_icao_query_code_is_sent_verbatim(tmp_path, code):
+    from urllib.parse import urlparse, parse_qs
+    seen = []
+    def opener(request, timeout):
+        seen.append(parse_qs(urlparse(request.full_url).query)['srchAl'][0])
+        return io.BytesIO(json.dumps(ok([])).encode())
+    client = UbikaisClient(cache_dir=tmp_path,opener=opener,retries=0,pace=0)
+    client.fetch('RKSI',Task(date(2026,10,26),'dep',code))
+    assert seen == [code]
+
+
 def test_pagination_and_completed_cache(tmp_path):
     opener=Opener(ok([{'flightPk':'1'}],2),ok([{'flightPk':'2'}],2))
     client=UbikaisClient(cache_dir=tmp_path,opener=opener,retries=0,pace=0)

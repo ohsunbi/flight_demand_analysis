@@ -3,18 +3,11 @@ import streamlit as st
 
 from engine.demand import cell_flights
 from config.airport_codes import icao_to_iata
-from config.airline_codes import ICAO_TO_IATA
+from config.airline_codes import flight_label
 
 
 def fmt(value):
     return value.strftime('%H:%M') if value else '—'
-
-
-def flight_label(flight_id):
-    candidates = ICAO_TO_IATA.get(flight_id[:3], ())
-    if len(flight_id) > 3 and len(candidates) == 1:
-        return candidates[0] + flight_id[3:]
-    return flight_id
 
 
 def frame(flights):
