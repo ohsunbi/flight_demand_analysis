@@ -15,6 +15,7 @@ BASE_SOURCE = "https://www.iata.org/en/about/members/airline-list/"
 
 # Official pages for records supplementing the IATA member snapshot.
 SUPPLEMENTAL_SOURCES = {
+    "LKE": "https://www.iata.org/en/about/members/airline-list/lucky-air/455/",
     "ABL": "https://www.narita-airport.jp/en/flight/airline-search/abl/",
     "AIQ": "https://www.narita-airport.jp/en/flight/airline-search/aiq/",
     "AJX": "https://airport.kr/ap_en/1408/subview.do",
@@ -67,6 +68,7 @@ SUPPLEMENTAL_SOURCES = {
 }
 
 ICAO_TO_IATA = {
+    "LKE": "8L",  # Lucky Air; confirmed against the IATA member page, 2026-10-29.
     "AAL": "AA",  # American Airlines
     "AAR": "OZ",  # Asiana Airlines
     "ABD": "CC",  # Air Atlanta Icelandic

@@ -3,7 +3,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 MAX_ANALYSIS_DAYS = 31
 MAX_QUERY_DAYS = 100
-MAX_QUERY_TASKS = 400
+MAX_QUERY_TASKS = 1000
 MAX_PAGES = 200
 MAX_OFFSET_MINUTES = 7 * 24 * 60
 AIRPORTS = {
@@ -14,6 +14,21 @@ AIRPORTS = {
     'RKTH': ('포항', 'KPO'), 'RKPS': ('사천', 'HIN'), 'RKJK': ('군산', 'KUV'),
     'RKNW': ('원주', 'WJU'), 'RKNY': ('양양', 'YNY'), 'RKTL': ('울진', ''),
 }
+# User-defined handling airlines; ICAO codes are query identities, not display codes.
+AIRPORT_AIRLINES = {
+    'RKSI': ('JJA', 'TTW', 'AXM'),
+    'RKSS': ('JJA', 'TTW'),
+    'RKPC': ('JJA', 'CQH', 'HKE'),
+    'RKPK': ('JJA', 'HKE', 'CQH', 'CDC'),
+    'RKTU': ('JJA', 'CSC', 'RLH', 'CDC'),
+    'RKTN': ('JJA', 'HKE', 'ESR', 'CSC', 'QDA', 'CDC', 'LKE', 'CBJ'),
+}
+
+
+def airport_airlines(airport):
+    return AIRPORT_AIRLINES.get(airport, ('JJA',))
+
+
 PALETTE = ['#f3f4f6', '#c9ead6', '#75c69a', '#f5df88', '#f8b375', '#e66b55', '#a92727']
 PALETTE_TEXT = ['#242424'] * 6 + ['#ffffff']
 

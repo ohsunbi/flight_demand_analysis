@@ -8,8 +8,8 @@ from datetime import date, datetime
 import pandas as pd
 import streamlit as st
 
-from config import AIRPORTS
-from config.airline_codes import parse_icao_codes, to_iata_codes
+from config import AIRPORTS, airport_airlines
+from config.airline_codes import ICAO_TO_IATA, parse_icao_codes, to_iata_codes
 from domain.models import KST, Offsets, Settings
 from engine.demand import half_day_peaks
 from services.analysis import Job, load_contract
@@ -78,6 +78,8 @@ if 'initial' not in st.session_state:
     st.session_state.initial = initial
     st.session_state.url_error = error
 initial = st.session_state.initial
+if 'codes' not in st.session_state:
+    st.session_state.codes = ','.join(initial.airlines)
 contract = load_contract()
 
 st.caption('RAMP HANDLING  /  RESOURCE PLANNING')
@@ -90,15 +92,35 @@ if st.session_state.get('url_error'):
 if not contract.verified:
     st.warning('UBIKAIS 데이터 계약 검증 중입니다. 실자료 조회는 잠정 분석으로 표시되며 정식 보고서 출력은 제한됩니다.')
 
+def airport_changed():
+    st.session_state.codes = ', '.join(airport_airlines(st.session_state.airport))
+
+
 settings_panel = st.container(border=True, key='analysis_settings')
 with settings_panel:
     target_col, period_col, time_col = st.columns(3, gap='medium')
     with target_col:
         st.html('<h2 class="settings-section-title">조회 대상</h2>')
         airport = st.selectbox('공항', list(AIRPORTS), index=list(AIRPORTS).index(initial.airport),
-                               format_func=lambda x: f'{AIRPORTS[x][0]} · {AIRPORTS[x][1] or x} ({x})', key='airport', width=360)
-        codes = st.text_input('항공사 코드 (ICAO 3자리)', value=','.join(initial.airlines), placeholder='JJA, TTW, AXM', key='codes', width=360,
-                              help='ICAO 영문 3자리 코드로 입력하세요. 여러 항공사는 쉼표로 구분합니다. 상세 편명과 보고서에는 대응하는 IATA 2자리 코드를 표시합니다.')
+                               format_func=lambda x: f'{AIRPORTS[x][0]} · {AIRPORTS[x][1] or x} ({x})', key='airport', width=360,
+                               on_change=airport_changed)
+        try:
+            preview_input = st.session_state.get('codes', ','.join(initial.airlines))
+            parse_icao_codes(preview_input, allow_empty=True)
+            preview_codes = tuple(dict.fromkeys(code.strip().upper() for code in preview_input.split(',') if code.strip()))
+        except ValueError:
+            preview_codes = ()
+        code_help = ['ICAO 영문 3자리 코드로 입력하세요. 여러 항공사는 쉼표(,)로 구분합니다.']
+        mapped = [ICAO_TO_IATA[code] for code in preview_codes if code in ICAO_TO_IATA]
+        if mapped:
+            code_help.append(f'\\* 입력된 코드(IATA) : {", ".join(mapped)}')
+        unknown = [code for code in preview_codes if code not in ICAO_TO_IATA]
+        if unknown:
+            code_help.append(f'변환 정보 없음: {", ".join(unknown)}')
+        if not preview_codes:
+            code_help.append('항공사 코드를 입력·확인하세요.')
+        codes = st.text_input('항공사 코드 (ICAO 3자리)', value=None, placeholder='JJA, TTW, AXM', key='codes', width=360,
+                              help='\n\n'.join(code_help))
     with period_col:
         st.html('<h2 class="settings-section-title">조회 기간</h2>')
         mode = st.radio('기간 선택', ['month', 'custom'], index=0 if initial.mode == 'month' else 1,
@@ -273,8 +295,8 @@ with left:
     title_col.subheader('시간대별 조업조 수요')
     from reports.render import lazy_download, output_stem
     saved_exports = st.session_state.get('export_cache')
-    if saved_exports is None or saved_exports[0] != result.result_id or len(saved_exports) < 3 or saved_exports[2] != 'unified-a4-v9':
-        saved_exports = (result.result_id, {}, 'unified-a4-v9')
+    if saved_exports is None or saved_exports[0] != result.result_id or len(saved_exports) < 3 or saved_exports[2] != 'unified-a4-v10':
+        saved_exports = (result.result_id, {}, 'unified-a4-v10')
         st.session_state.export_cache = saved_exports
     export_disabled = not result.exportable or settings is None
     stem = output_stem(result)

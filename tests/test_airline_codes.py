@@ -12,7 +12,7 @@ from ui.url_state import encode, decode
 
 @pytest.mark.parametrize('icao,iata', [('TTW','IT'),('AXM','AK'),('HKE','UO'),('CQH','9C'),
     ('CDC','GJ'),('CSC','3U'),('RLH','DR'),('JJA','7C'),('FDX','FX'),('JST','JQ'),
-    ('TZP','ZG'),('XUM','XU'),('ASA','AS')])
+    ('TZP','ZG'),('XUM','XU'),('ASA','AS'),('LKE','8L')])
 def test_query_codes_roundtrip_and_display_only(icao, iata):
     assert parse_icao_codes(icao.lower()) == (icao,)
     assert to_iata_codes((icao,)) == (iata,)
@@ -25,7 +25,7 @@ def test_query_codes_roundtrip_and_display_only(icao, iata):
 
 
 def test_partial_display_reference_never_limits_queries():
-    assert len(ICAO_TO_IATA) == 310
+    assert len(ICAO_TO_IATA) == 311
     assert all(re.fullmatch('[A-Z]{3}',k) and re.fullmatch('[A-Z0-9]{2}',v)
                for k,v in ICAO_TO_IATA.items())
     assert parse_icao_codes(' zzz, jja, ZZZ ') == ('JJA','ZZZ')
@@ -45,7 +45,7 @@ def test_bad_query_codes_block(code):
                                   {'v':'2','airlines':''}, {'v':'1','airlines':'JJA'}])
 def test_old_url_versions_are_rejected(params):
     restored,error = decode(params,date(2026,10,29))
-    assert error and restored.airlines == ('JJA',)
+    assert error and restored.airlines == ('AXM','JJA','TTW')
 
 
 def test_duplicate_display_codes_do_not_change_query_identity(monkeypatch):
@@ -62,7 +62,7 @@ def test_nonstandard_flight_identifiers_stay_unchanged(original):
     assert flight_label(original) == original
 
 
-def test_query_codes_reach_collector_unchanged_and_preserve_flights():
+def test_query_codes_select_whole_snapshot_and_preserve_flights():
     codes = ('AXM','CDC','CQH','CSC','HKE','RLH','TTW','XUM','ZZZ')
     settings = Settings('RKSI',date(2026,10,26),date(2026,10,26),mode='custom',airlines=codes)
     seen = []
@@ -71,10 +71,10 @@ def test_query_codes_reach_collector_unchanged_and_preserve_flights():
             seen.append(task.airline)
             rows = ()
             if task.day == settings.start and task.direction == 'dep':
-                rows = (dict(flightPk=task.airline,fpId=task.airline+'001F',schDate='20261026',schTime='1000'),)
+                rows = tuple(dict(flightPk=code,fpId=code+'001F',schDate='20261026',schTime='1000') for code in (*codes,'AAR'))
             return Batch(task.day,task.direction,task.airline,rows,datetime(2026,10,29,tzinfo=KST))
     result = run_analysis(settings,Client(),VERIFIED)
-    assert set(seen) == set(codes)
+    assert set(seen) == {''} and len(seen) == 8
     assert sum(c.dep_count for c in result.cells) == len(codes)
     assert {f.flight_id for f in result.flights} == {code+'001F' for code in codes}
     assert {f.query_airlines[0] for f in result.flights} == set(codes)

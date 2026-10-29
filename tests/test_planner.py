@@ -6,10 +6,19 @@ from domain.models import Settings
 from services.planner import plan
 
 
-def test_multiple_airline_tasks_are_explicit():
+def test_multiple_airlines_share_date_direction_tasks():
     s=Settings('RKSI',date(2026,10,26),date(2026,10,26),mode='custom',airlines=('ESR','KAL'))
     tasks=plan(s)
-    assert len(tasks)==16 and {t.airline for t in tasks}=={'ESR','KAL'}
+    assert len(tasks)==8 and {t.airline for t in tasks}=={''}
+    assert len({(t.day,t.direction) for t in tasks}) == len(tasks)
+
+
+def test_daegu_month_with_eight_airlines_needs_72_complete_snapshots():
+    from config import MAX_QUERY_TASKS, airport_airlines
+    assert MAX_QUERY_TASKS == 1000
+    settings = Settings('RKTN',date(2026,10,1),date(2026,10,31),basis='actual',
+                        airlines=airport_airlines('RKTN'))
+    assert len(plan(settings,actual_query_padding_days=1)) == 72
 
 
 def test_actual_contract_boundary_padding():

@@ -1,12 +1,14 @@
 import calendar
 from datetime import date
 
+from config import airport_airlines
 from domain.models import Offsets, Settings
 from config.airline_codes import parse_icao_codes
 
 
 def defaults(today):
-    return Settings('RKSI', today.replace(day=1), today.replace(day=calendar.monthrange(today.year, today.month)[1]), airlines=('JJA',))
+    return Settings('RKSI', today.replace(day=1), today.replace(day=calendar.monthrange(today.year, today.month)[1]),
+                    airlines=tuple(sorted(airport_airlines('RKSI'))))
 
 
 def encode(settings):
@@ -30,6 +32,8 @@ def decode(params, today):
             raise ValueError('지원하지 않는 설정 URL 버전입니다.')
         base = encode(defaults(today))
         base.update({k: str(v) for k, v in params.items() if k in base})
+        if 'airlines' not in params:
+            base['airlines'] = ','.join(airport_airlines(base['airport']))
         airlines = parse_icao_codes(base['airlines'], allow_empty=True)
         def offsets(key):
             values = [int(v) for v in base[key].split(',')]

@@ -30,9 +30,8 @@ def plan(settings: Settings, *, actual_query_padding_days=0) -> tuple[Task, ...]
         if count > MAX_QUERY_DAYS:
             raise ValueError('조업 설정에 필요한 보충 조회 날짜가 너무 많습니다.')
         for i in range(count):
-            for airline in settings.airlines or ('',):
-                tasks.append(Task(first + timedelta(days=i), direction, airline))
-    # Selected-airline queries use the provider's filter, never an inferred operator.
+            tasks.append(Task(first + timedelta(days=i), direction))
+    # Collect one complete all-airline snapshot per date/direction, then select locally.
     if len(tasks) > MAX_QUERY_TASKS:
         raise ValueError('요청 계획이 운영 제한을 초과했습니다.')
     return tuple(tasks)
