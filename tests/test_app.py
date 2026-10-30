@@ -165,7 +165,7 @@ def test_unlisted_icao_and_unsupported_url_do_not_fetch(monkeypatch):
     app = AppTest.from_file('app.py',default_timeout=15).run()
     app.text_input(key='codes').set_value(' xum, zzz, XUM ').run()
     assert not app.exception and not app.error
-    assert app.query_params['v'] == ['3']
+    assert app.query_params['v'] == ['4']
     assert app.query_params['airlines'] == ['XUM,ZZZ']
     assert all(not button.disabled for button in app.button)
     assert 'job' not in app.session_state
@@ -175,7 +175,7 @@ def test_unlisted_icao_and_unsupported_url_do_not_fetch(monkeypatch):
     assert not legacy.exception
     assert legacy.warning
     assert legacy.text_input(key='codes').value == 'JJA, TTW, AXM'
-    assert legacy.query_params['v'] == ['3']
+    assert legacy.query_params['v'] == ['4']
     assert legacy.query_params['airlines'] == ['AXM,JJA,TTW']
     assert 'job' not in legacy.session_state
 

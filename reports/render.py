@@ -69,6 +69,8 @@ def _figure(result, col_start, col_end):
     airlines=', '.join(to_iata_codes(s.airlines)) if s.airlines else '전체 항공사'
     scope = f' | 분석 대상 : {s.direction_label}' if s.directions != ('dep', 'arr') else ''
     airline_lines=textwrap.wrap(f'{airport}{scope} | 항공사 : {airlines}',width=55)
+    if s.quick_turn_active:
+        airline_lines.append(f'퀵턴 {s.turn_limit}분 이내 | 대기 연속 점유 | 연결 시 출발편 이동시간 적용')
     for i,line in enumerate(airline_lines):
         text(width-margin,header_top+16+i*11,line,size=9,ha='right')
     title_y=max(header_top+36,header_top+16+len(airline_lines)*11+10)
@@ -115,15 +117,18 @@ def _figure(result, col_start, col_end):
         if ('dep' if i == 0 else 'arr') not in s.directions:
             inline(content_x, row_y, [(name+'   분석 제외', True)], content_width)
             continue
+        travel_label = f'{value.reusable-value.end}분 적용'
+        if s.quick_turn_active and i == 1:
+            travel_label = f'{value.reusable-value.end}분 (단독편)'
         inline(content_x, row_y, [(name+'   조업 시간  ',True),
                (f'{reference} {offset_label(value.start)} ~ {reference} {offset_label(value.end)}',False),
-               ('  |  조업 후 이동시간  ',True),(f'{value.reusable-value.end}분 적용',False)], content_width)
+               ('  |  조업 후 이동시간  ',True),(travel_label,False)], content_width)
     # Keep page scope and actual-time fallback separate from the three condition rows.
     if s.interval==30:
         text(width-margin, condition_y+72, f'이 페이지 시간대  {first.start:%H:%M} ~ {end_time}',
              size=7.5, color='#68625e', ha='right')
     if s.basis=='actual':
-        text(margin, condition_y+72, '실제시각이 없는 편은 STD/STA 적용', size=7.5, color='#68625e')
+        text(margin, condition_y+72, '실제시각이 없는 편은 STD/STA 적용 · 날짜 추정은 조기 3시간 허용', size=7.5, color='#68625e')
     table_top=card_y+(184 if s.interval==30 or s.basis=='actual' else 166)
     table_height=min(height-table_top-24,s.days*28)
     table_bottom = 1-(table_top+table_height)/height

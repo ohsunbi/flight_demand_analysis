@@ -21,7 +21,7 @@ def _validate_query_date(batch, contract):
             raise CollectionError('원본 조회일과 예정일의 차이가 검증 범위를 벗어났습니다. 조회 날짜 규칙을 다시 확인해야 합니다.')
 
 
-def collect(settings, client, contract, *, refresh=False, cancel=None, progress=None):
+def collect(settings, client, contract, *, refresh=False, cancel=None, progress=None, context=None):
     padding = contract.actual_query_padding_days if settings.basis == 'actual' else 0
     tasks = plan(settings, actual_query_padding_days=padding or 0)
     total, completed = len(tasks), 0
@@ -44,6 +44,8 @@ def collect(settings, client, contract, *, refresh=False, cancel=None, progress=
 
     for task in tasks:
         snapshot = fetch(task)
+        if context is not None:
+            context.append(snapshot)
         if not settings.airlines:
             batches.append(snapshot)
             continue

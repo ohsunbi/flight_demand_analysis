@@ -13,10 +13,11 @@ def defaults(today):
 
 def encode(settings):
     settings.validate()
-    return dict(v='3', airport=settings.airport, mode=settings.mode,
+    return dict(v='4', airport=settings.airport, mode=settings.mode,
                 start=settings.start.isoformat(), end=settings.end.isoformat(),
                 airlines=','.join(settings.airlines), basis=settings.basis,
                 day_start=str(settings.day_start), interval=str(settings.interval), directions=','.join(settings.directions),
+                quick_turn='1' if settings.quick_turn else '0', turn_limit=str(settings.turn_limit),
                 dep=','.join(str(v) for v in (settings.dep.start, settings.dep.end, settings.dep.reusable)),
                 arr=','.join(str(v) for v in (settings.arr.start, settings.arr.end, settings.arr.reusable)))
 
@@ -27,21 +28,25 @@ def decode(params, today):
     try:
         if sum(len(str(k)) + len(str(v)) for k, v in params.items()) > 4096:
             raise ValueError('설정 URL이 너무 깁니다.')
-        version = params.get('v', '3')
-        if version != '3':
+        version = params.get('v', '4')
+        if version not in ('3', '4'):
             raise ValueError('지원하지 않는 설정 URL 버전입니다.')
+        if version == '3' and any(k in params for k in ('quick_turn', 'turn_limit')):
+            raise ValueError('퀵턴 설정에는 URL 버전 4가 필요합니다.')
         base = encode(defaults(today))
         base.update({k: str(v) for k, v in params.items() if k in base})
         if 'airlines' not in params:
             base['airlines'] = ','.join(airport_airlines(base['airport']))
         airlines = parse_icao_codes(base['airlines'], allow_empty=True)
+        if base['quick_turn'] not in ('0', '1'):
+            raise ValueError('잘못된 퀵턴 설정입니다.')
         def offsets(key):
             values = [int(v) for v in base[key].split(',')]
             return Offsets(*values)
         result = Settings(base['airport'], date.fromisoformat(base['start']), date.fromisoformat(base['end']),
                           base['mode'], airlines,
                           base['basis'], int(base['day_start']), int(base['interval']), offsets('dep'), offsets('arr'),
-                          tuple(base['directions'].split(',')))
+                          tuple(base['directions'].split(',')), base['quick_turn'] == '1', int(base['turn_limit']))
         result.validate()
         return result, None
     except (ValueError, TypeError, OverflowError):

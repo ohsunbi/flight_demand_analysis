@@ -21,8 +21,17 @@ def plan(settings: Settings, *, actual_query_padding_days=0) -> tuple[Task, ...]
     for direction, offsets in [('dep', settings.dep), ('arr', settings.arr)]:
         if direction not in settings.directions:
             continue
-        lo = min(a, a - timedelta(minutes=offsets.reusable))
-        hi = max(b, b - timedelta(minutes=offsets.start))
+        earliest, latest = offsets.start, offsets.reusable
+        if settings.quick_turn_active:
+            travel = settings.dep.reusable-settings.dep.end
+            if direction == 'arr':
+                earliest = min(earliest, settings.dep.start)
+                latest = max(latest, settings.arr.end+travel, settings.turn_limit+settings.dep.end+travel)
+            else:
+                earliest = min(earliest, settings.arr.start-settings.turn_limit)
+                latest = max(latest, settings.arr.end+travel)
+        lo = min(a, a - timedelta(minutes=latest))
+        hi = max(b, b - timedelta(minutes=earliest))
         # Broad calendar coverage is deliberately followed by exact datetime filtering.
         # Observed provider contract: a query can include the following scheduled day.
         # Include previous query day even for zero-length / all-zero offsets.

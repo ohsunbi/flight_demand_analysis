@@ -8,7 +8,7 @@ from threading import Event, Lock
 from config import ROOT
 from domain.models import Contract, KST
 from engine.demand import analyze
-from normalization.flights import normalize
+from normalization.flights import movement_context, normalize
 from services.collection import collect
 from adapters.ubikais_client import check_cancel
 
@@ -26,8 +26,9 @@ def load_contract():
 
 
 def run_analysis(settings, client, contract, *, refresh=False, cancel=None, progress=None):
+    snapshots = [] if settings.quick_turn_active else None
     batches, queries, fallback_groups = collect(settings, client, contract, refresh=refresh,
-                                               cancel=cancel, progress=progress)
+                                               cancel=cancel, progress=progress, context=snapshots)
     check_cancel(cancel)
     if progress:
         progress(queries, queries, '정규화·수요 계산')
@@ -43,10 +44,17 @@ def run_analysis(settings, client, contract, *, refresh=False, cancel=None, prog
         blockers.append('실제일자가 달라진 지연편의 조회 범위를 확인하지 못했습니다.')
     if diag.conflicts or diag.quarantined:
         blockers.append('격리·충돌 자료가 있어 정식 결과로 확정할 수 없습니다.')
-    result = analyze(settings, flights, diag, min(b.fetched_at for b in batches), max(b.fetched_at for b in batches), blockers=blockers)
-    digest = hashlib.sha256(b'collection-v2/normalization-v1/engine-v1')
+    context = movement_context(snapshots, settings.airport, contract, check=lambda: check_cancel(cancel)) if snapshots is not None else ()
+    check_cancel(cancel)
+    result = analyze(settings, flights, diag, min(b.fetched_at for b in batches), max(b.fetched_at for b in batches),
+                     blockers=blockers, context=context, check=lambda: check_cancel(cancel))
+    digest = hashlib.sha256(b'collection-v2/normalization-v2/engine-v2/turnaround-v1')
+    digest.update(contract.actual_date_policy.encode())
     for batch in batches:
         digest.update(json.dumps([str(batch.query_date),batch.direction,batch.airline,batch.records],sort_keys=True,default=str).encode())
+    if snapshots is not None:
+        for batch in snapshots:
+            digest.update(json.dumps([str(batch.query_date),batch.direction,batch.records],sort_keys=True,default=str).encode())
     result.data_version = digest.hexdigest()[:16]
     a, b = settings.window
     eligible = [f for f in result.flights if a <= f.reference < b]

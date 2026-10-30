@@ -19,7 +19,7 @@ def test_query_codes_roundtrip_and_display_only(icao, iata):
     assert flight_label(icao+'001F') == iata+'001F'
     settings = Settings('RKSI',date(2026,10,26),date(2026,10,26),mode='custom',airlines=(icao,))
     params = encode(settings)
-    assert params['v'] == '3' and params['airlines'] == icao
+    assert params['v'] == '4' and params['airlines'] == icao
     restored, error = decode(params,date(2026,10,29))
     assert not error and restored == settings
 

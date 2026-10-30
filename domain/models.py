@@ -44,6 +44,8 @@ class Settings:
     dep: Offsets = field(default_factory=lambda: Offsets(-50, 10, 20))
     arr: Offsets = field(default_factory=lambda: Offsets(-20, 30, 40))
     directions: tuple[Direction, ...] = ('dep', 'arr')
+    quick_turn: bool = False
+    turn_limit: int = 100
 
     def validate(self):
         if self.airport not in AIRPORTS:
@@ -68,6 +70,12 @@ class Settings:
             raise ValueError('출발편 또는 도착편을 하나 이상 선택하세요.')
         self.dep.validate(active='dep' in self.directions)
         self.arr.validate(active='arr' in self.directions)
+        if type(self.quick_turn) is not bool or type(self.turn_limit) is not int or not 1 <= self.turn_limit <= 360:
+            raise ValueError('퀵턴 제한시간은 1~360분의 정수로 입력하세요.')
+
+    @property
+    def quick_turn_active(self):
+        return self.quick_turn and self.basis == 'actual' and self.directions == ('dep', 'arr')
 
     @property
     def direction_label(self):
@@ -127,6 +135,30 @@ class Flight:
     flight_pk: str = ''
     source_metadata: tuple[tuple[str, str], ...] = ()
     actual_clock: str = ''
+    registration: str = ''
+    spot: str = ''
+
+
+@dataclass(frozen=True)
+class Movement:
+    key: str
+    airport: str
+    direction: Direction
+    registration: str
+    spot: str
+    time: datetime
+    actual: bool
+
+
+@dataclass(frozen=True)
+class HandlingJob:
+    key: str
+    kind: str
+    flights: tuple[Flight, ...]
+    start: datetime
+    end: datetime
+    reusable: datetime
+    note: str = ''
 
 
 @dataclass(frozen=True)
@@ -135,10 +167,11 @@ class Segment:
     end: datetime
     dep: int
     arr: int
+    turn: int = 0
 
     @property
     def total(self):
-        return self.dep + self.arr
+        return self.dep + self.arr + self.turn
 
 
 @dataclass(frozen=True)
@@ -154,6 +187,7 @@ class Cell:
     dep_count: int
     arr_count: int
     peak_intervals: tuple[tuple[datetime, datetime], ...]
+    turn_active: int = 0
 
 
 @dataclass
@@ -169,6 +203,8 @@ class Diagnostics:
     date_unresolved: int = 0
     actual_date_inferred: int = 0
     unknown_status: int = 0
+    quick_turn_pairs: int = 0
+    quick_turn_unpaired: int = 0
     messages: list[str] = field(default_factory=list)
 
 
@@ -200,6 +236,7 @@ class Analysis:
     blockers: tuple[str, ...] = ()
     synthetic: bool = False
     data_version: str = ''
+    jobs: tuple[HandlingJob, ...] = ()
 
     @property
     def maximum(self):

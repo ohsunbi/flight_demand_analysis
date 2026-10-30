@@ -6,6 +6,6 @@
   "known_statuses": ["DEP", "ARR", "DLA"],
   "actual_same_day_verified": false,
   "actual_query_padding_days": 1,
-  "actual_date_policy": "nearest_scheduled",
-  "evidence": "2026-10-27 사용자 확인 KST·가까운 예정일로 실제 날짜 추정 허용. RKSI 25~27일과 RKSS/RKPC 26일 양방향 표본: 예정일-조회일 0~1일. 이 범위로 요청 계획하며 응답이 벗어나면 실패 처리. 공식 JS에서 RAM 필드·flightPk recid·CNL 표시 확인. 운항사/공동운항 연결·하루 이상 지연 실제일자는 미확정."
+  "actual_date_policy": "bounded_early_180",
+  "evidence": "2026-10-27 사용자 확인 KST. 2026-10-30 사용자가 날짜 추정을 조기 3시간 허용으로 변경 승인했으며 DLA는 날짜 결정에 쓰지 않음. RKSI 25~27일과 RKSS/RKPC 26일 양방향 표본: 예정일-조회일 0~1일. 이 범위로 요청 계획하며 응답이 벗어나면 실패 처리. 공식 JS에서 RAM 필드·flightPk recid·CNL 표시 확인. 운항사/공동운항 연결·하루 이상 지연 실제일자는 미확정."
 }

@@ -17,6 +17,7 @@ from adapters.ubikais_client import UbikaisClient
 from services.planner import plan
 from ui import details, heatmap
 from ui.summary import occurrence_dates
+from ui.help import display_help
 from ui.url_state import decode, encode
 
 st.set_page_config(page_title='시간대별 램프조업 수요 분석', page_icon='✈', layout='wide')
@@ -135,7 +136,23 @@ with settings_panel:
             dates = st.date_input('시작일 ~ 종료일 (최대 31일)', value=(initial.start, initial.end), format='YYYY-MM-DD', key='dates', width=360)
             start, end = (dates[0], dates[-1]) if len(dates) == 2 else (None, None)
     with time_col:
-        st.html('<h2 class="settings-section-title">시간 설정</h2>')
+        can_turn = (st.session_state.get('basis', initial.basis) == 'actual'
+                    and st.session_state.get('dep_included', 'dep' in initial.directions)
+                    and st.session_state.get('arr_included', 'arr' in initial.directions))
+        requested_turn = st.session_state.get('quick_turn', initial.quick_turn)
+        requested_limit = st.session_state.get('turn_limit', initial.turn_limit)
+        with st.container(horizontal=True, horizontal_alignment='distribute', vertical_alignment='center', key='time_settings_header'):
+            st.html('<h2 class="settings-section-title">시간 설정</h2>', width='content')
+            turn_menu = st.popover(f'퀵턴 {requested_limit}분' if requested_turn and can_turn else '퀵턴 미적용',
+                                  disabled=not can_turn, key='turn_settings',
+                                  help='실제 (RAMP IN/OUT) 기준에서 출발·도착을 모두 사용할 때 적용합니다.')
+        with turn_menu:
+            quick_turn = st.checkbox('퀵턴 반영', value=initial.quick_turn, key='quick_turn', disabled=not can_turn)
+            turn_limit = st.number_input('제한시간 (분)', min_value=1, max_value=360,
+                                         value=initial.turn_limit, step=1, key='turn_limit', disabled=not quick_turn or not can_turn)
+            if quick_turn:
+                st.caption(f'RAMP IN ~ RAMP OUT {turn_limit}분 이내 · REG·SPOT 일치')
+                st.caption('대기시간도 같은 조가 연속 점유하며, 마지막 출발편 이동시간만 적용합니다.')
         basis = st.radio('분석 기준시각', ['scheduled', 'actual'], index=0 if initial.basis == 'scheduled' else 1,
                          format_func=lambda x: '계획 (STA/STD)' if x == 'scheduled' else '실제 (RAMP IN/OUT)',
                          horizontal=True, key='basis', help='실제는 RAMP IN/OUT 기준이며, 값이 없으면 STA/STD를 사용합니다.')
@@ -194,7 +211,8 @@ try:
     if start is None or end is None:
         raise ValueError('시작일과 종료일을 모두 선택하세요.')
     airlines = parse_icao_codes(codes)
-    settings = Settings(airport, start, end, mode, airlines, basis, ds, interval, *offsets, directions=tuple(directions))
+    settings = Settings(airport, start, end, mode, airlines, basis, ds, interval, *offsets,
+                        directions=tuple(directions), quick_turn=quick_turn, turn_limit=turn_limit)
     tasks = plan(settings, actual_query_padding_days=(contract.actual_query_padding_days or 0) if basis == 'actual' else 0)
     params = encode(settings)
     if dict(st.query_params) != params:
@@ -267,6 +285,7 @@ if os.getenv('CREW_DEMO') == '1' and 'result' not in st.session_state and settin
 result = st.session_state.get('result')
 if result is None:
     st.info('조건을 선택하고 분석 실행을 누르세요. 분석은 최대 31개 운영일까지 가능합니다.')
+    display_help()
     st.stop()
 
 applied = result.settings
@@ -285,6 +304,8 @@ st.divider()
 st.caption(f'적용 결과 · {name} {iata} · {applied.start} ~ {applied.end} · {"전체 항공사" if not applied.airlines else ", ".join(to_iata_codes(applied.airlines))} · {"계획 (STA/STD)" if applied.basis == "scheduled" else "실제 (RAMP IN/OUT)"} · 분석 간격 {applied.interval}분')
 if result.synthetic:
     st.warning('개발 검증용 가상 데이터입니다. 실제 운항자료가 아닙니다.')
+if applied.quick_turn_active:
+    st.caption(f'적용 계산 · 퀵턴 {applied.turn_limit}분 이내 · 대기 연속 점유 · 출발편 이동시간 적용')
 for blocker in result.blockers:
     st.warning(blocker)
 with st.container(key='summary_metrics'):
@@ -298,7 +319,7 @@ with st.container(key='summary_metrics'):
 if applied.basis == 'actual':
     st.caption(f'기간 편수 기준: 실제시각 사용 {result.diagnostics.actual_used}편 (그중 실제 날짜 추정 {result.diagnostics.actual_date_inferred}편) · 예정 대체 {result.diagnostics.scheduled_used}편')
     if result.diagnostics.actual_date_inferred:
-        st.info('날짜 없는 주기장 시각은 예정시각에 가장 가까운 날짜로 계산했습니다. 하루 이상 지연된 운항은 날짜를 잘못 배치할 수 있습니다.')
+        st.info('날짜 없는 주기장 시각은 예정시각보다 조기 3시간까지 허용하는 날짜로 추정했습니다. 하루 이상 지연된 운항은 날짜를 잘못 배치할 수 있습니다.')
 
 left, right = st.columns([2.2, 1], gap='large')
 with left:
@@ -306,8 +327,8 @@ with left:
     title_col.subheader('시간대별 조업조 수요')
     from reports.render import lazy_download, output_stem
     saved_exports = st.session_state.get('export_cache')
-    if saved_exports is None or saved_exports[0] != result.result_id or len(saved_exports) < 3 or saved_exports[2] != 'unified-a4-v14':
-        saved_exports = (result.result_id, {}, 'unified-a4-v14')
+    if saved_exports is None or saved_exports[0] != result.result_id or len(saved_exports) < 3 or saved_exports[2] != 'unified-a4-v15':
+        saved_exports = (result.result_id, {}, 'unified-a4-v15')
         st.session_state.export_cache = saved_exports
     export_disabled = not result.exportable or settings is None
     stem = output_stem(result)
@@ -327,11 +348,15 @@ with st.expander('데이터 품질 · 추가 분석'):
     diag = result.diagnostics
     st.write(f'수집 {diag.raw}건 · 완전 중복 {diag.duplicates}건 · 확인된 결항 제외 {diag.cancelled}건 · 격리 {diag.quarantined}건')
     st.write(f'기간 편수 중 실제시각 사용 {diag.actual_used}편 (실제 날짜 추정 {diag.actual_date_inferred}편 포함) · 예정시각 사용 {diag.scheduled_used}편')
+    if applied.quick_turn_active:
+        st.write(f'분석 범위 관련 퀵턴 연결 {diag.quick_turn_pairs}건 · 개별 조업 {diag.quick_turn_unpaired}건')
     for message in diag.messages:
         st.write(message)
     st.caption(f'자료 수집: {result.collected_from:%Y-%m-%d %H:%M:%S} ~ {result.collected_until:%Y-%m-%d %H:%M:%S} KST')
-    st.caption(f'자료 버전 {result.data_version or "가상 자료"} · 정규화 v1 / 계산 엔진 v1')
+    st.caption(f'자료 버전 {result.data_version or "가상 자료"} · 정규화 v2 / 계산 엔진 v2')
     hist = result.histogram_minutes
     st.dataframe(pd.DataFrame([{'필요 조업조': k, '정확히 해당 조 수 (분)': v,
                                '해당 조 수 이상 (분)': sum(t for j,t in hist.items() if j >= k)} for k,v in hist.items()]), hide_index=True)
     st.caption(f'기간 총 점유량: {sum(result.daily_crew_minutes)/60:.1f} 조·시간. 0조 수요 시간도 포함합니다.')
+
+display_help()

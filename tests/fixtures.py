@@ -26,7 +26,11 @@ def demo_result(settings):
                            staDate=ref.strftime('%Y%m%d'), sta=ref.strftime('%H%M'))
                 if i % 3:
                     actual = ref + timedelta(minutes=(i%4)*11)
+                    if settings.quick_turn_active and direction == 'dep':
+                        actual += timedelta(minutes=40)
                     raw['blockOffTime' if direction=='dep' else 'blockOnTime'] = actual.strftime('%Y%m%d%H%M')
+                if settings.quick_turn_active:
+                    raw.update(acId=f'SYN-{day}-{i}', standDep=f'P{i:02d}', standArr=f'P{i:02d}')
                 rows.append(raw)
             if settings.airlines:
                 for code in settings.airlines:
