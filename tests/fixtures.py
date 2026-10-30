@@ -15,6 +15,8 @@ def demo_result(settings):
     day = start
     while day <= end:
         for direction in ('dep','arr'):
+            if direction not in settings.directions:
+                continue
             rows = []
             for i in range(16):
                 ref = datetime.combine(day, datetime.min.time(), KST) + timedelta(minutes=6*60+i*48+(day.day%5)*7)

@@ -8,7 +8,7 @@ from config.airline_codes import parse_icao_codes
 
 def defaults(today):
     return Settings('RKSI', today.replace(day=1), today.replace(day=calendar.monthrange(today.year, today.month)[1]),
-                    airlines=tuple(sorted(airport_airlines('RKSI'))))
+                    airlines=airport_airlines('RKSI'))
 
 
 def encode(settings):
@@ -16,7 +16,7 @@ def encode(settings):
     return dict(v='3', airport=settings.airport, mode=settings.mode,
                 start=settings.start.isoformat(), end=settings.end.isoformat(),
                 airlines=','.join(settings.airlines), basis=settings.basis,
-                day_start=str(settings.day_start), interval=str(settings.interval),
+                day_start=str(settings.day_start), interval=str(settings.interval), directions=','.join(settings.directions),
                 dep=','.join(str(v) for v in (settings.dep.start, settings.dep.end, settings.dep.reusable)),
                 arr=','.join(str(v) for v in (settings.arr.start, settings.arr.end, settings.arr.reusable)))
 
@@ -40,7 +40,8 @@ def decode(params, today):
             return Offsets(*values)
         result = Settings(base['airport'], date.fromisoformat(base['start']), date.fromisoformat(base['end']),
                           base['mode'], airlines,
-                          base['basis'], int(base['day_start']), int(base['interval']), offsets('dep'), offsets('arr'))
+                          base['basis'], int(base['day_start']), int(base['interval']), offsets('dep'), offsets('arr'),
+                          tuple(base['directions'].split(',')))
         result.validate()
         return result, None
     except (ValueError, TypeError, OverflowError):

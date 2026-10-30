@@ -30,6 +30,9 @@ def test_explicit_url_airlines_override_presets(explicit):
 def test_airport_change_fills_codes_and_preserves_edits_until_next_change(monkeypatch):
     monkeypatch.delenv('CREW_DEMO',raising=False)
     app = AppTest.from_file('app.py',default_timeout=15).run()
+    assert not app.exception and not app.error
+    assert app.text_input(key='codes').value == 'JJA, TTW, AXM'
+    assert app.query_params['airlines'] == ['AXM,JJA,TTW']
     for airport in ('RKSS','RKPC','RKPK','RKTU','RKTN','RKJB','RKSI'):
         app.selectbox(key='airport').set_value(airport).run()
         assert not app.exception and not app.error

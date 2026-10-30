@@ -19,6 +19,8 @@ def plan(settings: Settings, *, actual_query_padding_days=0) -> tuple[Task, ...]
     a, b = settings.window
     tasks = []
     for direction, offsets in [('dep', settings.dep), ('arr', settings.arr)]:
+        if direction not in settings.directions:
+            continue
         lo = min(a, a - timedelta(minutes=offsets.reusable))
         hi = max(b, b - timedelta(minutes=offsets.start))
         # Broad calendar coverage is deliberately followed by exact datetime filtering.

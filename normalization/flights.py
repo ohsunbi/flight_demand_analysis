@@ -52,6 +52,8 @@ def normalize(batches: tuple[Batch, ...], settings: Settings, contract: Contract
     diag = Diagnostics()
     groups = defaultdict(list)
     for batch in batches:
+        if batch.direction not in settings.directions:
+            continue
         for raw in batch.records:
             diag.raw += 1
             date_key = 'schDate' if batch.direction == 'dep' else 'staDate'

@@ -100,8 +100,89 @@ def test_chart_and_report_exports_cover_full_month(interval,report_pages):
         page_text=page.extract_text()
         assert all(f'10/{day:02d}' in page_text for day in range(1,32))
         assert '오전 최대 수요' in page_text and '오후 최대 수요' in page_text
+        assert '일별 편수' not in page_text and '출발' in page_text and '도착' in page_text
         assert r.result_id not in page_text
     assert '00:00' in report.pages[0].extract_text() if interval==60 else '00' in report.pages[0].extract_text()
+
+
+@pytest.mark.parametrize('basis', ['scheduled', 'actual'])
+@pytest.mark.parametrize('interval', [60, 30])
+@pytest.mark.parametrize('day_start', [0, 120, 720])
+def test_daily_flight_counts_follow_full_operating_day_on_each_page(basis, interval, day_start):
+    from datetime import timedelta
+    from reports.render import _figure
+
+    settings = Settings('RKSI', date(2026,10,26), date(2026,10,28), mode='custom',
+                        basis=basis, interval=interval, day_start=day_start)
+    result = demo_result(settings)
+    a, _ = settings.window
+    expected = []
+    for day in range(settings.days):
+        start, end = a+timedelta(days=day), a+timedelta(days=day+1)
+        expected.append(tuple(sum(f.direction == direction and start <= f.reference < end
+                                  for f in result.flights) for direction in ('dep', 'arr')))
+    n = 1440//interval
+    for col_start in range(0, n, 24):
+        fig = _figure(result, col_start, min(n, col_start+24))
+        try:
+            ax = fig.axes[1]
+            displayed = {(int(t.get_position()[1]), int(t.get_position()[0])): int(t.get_text())
+                         for t in ax.texts if t.get_text().isdigit()}
+            assert [[displayed[r, c] for c in range(2)] for r in range(settings.days)] == [list(v) for v in expected]
+            assert sum(displayed[r, 0] for r in range(settings.days)) == sum(c.dep_count for c in result.cells)
+            assert sum(displayed[r, 1] for r in range(settings.days)) == sum(c.arr_count for c in result.cells)
+        finally:
+            fig.clear()
+
+
+@pytest.mark.parametrize('interval,day_start', [(60, 0), (30, 120), (60, 125)])
+@pytest.mark.parametrize('totals', [((0, 10), (10, 100)), ((0, 0), (0, 0)),
+                                  ((53, 60), (60, 53)), ((56, 53), (56, 60))])
+def test_count_shading_compares_each_direction_and_headers_align_with_hours(interval, day_start, totals):
+    from dataclasses import replace
+    import numpy as np
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from reports.render import _figure
+
+    result = demo_result(Settings('RKSI', date(2026,10,26), date(2026,10,27),
+                                  mode='custom', interval=interval, day_start=day_start))
+    n = 1440//interval
+    result.cells = tuple(replace(c, dep_count=totals[i//n][0] if i % n == 0 else 0,
+                                arr_count=totals[i//n][1] if i % n == 0 else 0)
+                         for i, c in enumerate(result.cells))
+    previous_shades = None
+    for col_start in range(0, n, 24):
+        fig = _figure(result, col_start, min(n, col_start+24))
+        try:
+            canvas = FigureCanvasAgg(fig)
+            canvas.draw()
+            renderer = canvas.get_renderer()
+            heatmap, counts = fig.axes
+            def first_baseline(label):
+                # Korean and numeric glyph bounds differ even on the same baseline.
+                return (label.get_transform().transform(label.get_position())[1]
+                        + label._get_layout(renderer)[1][0][3])
+            hour_baseline = first_baseline(heatmap.get_xticklabels()[0])
+            assert all(abs(first_baseline(label)-hour_baseline) < .1
+                       for label in counts.get_xticklabels())
+            assert not any(t.get_text() == '일별 편수' for t in counts.texts)
+            image = counts.images[0]
+            assert image.norm.vmin == 0 and image.norm.vmax == 1
+            shades = image.to_rgba(image.get_array())
+            assert np.allclose(shades[..., 0], shades[..., 1])
+            assert np.allclose(shades[..., 1], shades[..., 2])
+            for column in range(2):
+                values = np.array(totals)[:, column]
+                if values.min() == values.max():
+                    assert np.allclose(shades[:, column], image.cmap(0.0))
+                else:
+                    assert np.allclose(shades[values.argmin(), column], image.cmap(0.0))
+                    assert np.allclose(shades[values.argmax(), column], image.cmap(1.0))
+            if previous_shades is not None:
+                assert np.allclose(shades, previous_shades)
+            previous_shades = shades
+        finally:
+            fig.clear()
 
 
 def test_chart_split_respects_non_midnight_operating_day():

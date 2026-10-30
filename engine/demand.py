@@ -15,6 +15,8 @@ def analyze(settings: Settings, flights: tuple[Flight, ...], diagnostics: Diagno
     events[a]; events[b]
     relevant = []
     for f in flights:
+        if f.direction not in settings.directions:
+            continue
         if not (a <= f.reference < b or (f.start < b and f.reusable > a and f.start < f.reusable)):
             continue
         relevant.append(f)

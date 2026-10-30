@@ -20,10 +20,14 @@ class Offsets:
     end: int
     reusable: int
 
-    def validate(self):
-        if not self.start <= self.end <= self.reusable:
+    def validate(self, *, active=True):
+        if any(type(v) is not int for v in asdict(self).values()):
+            raise ValueError('조업 오프셋은 정수 분으로 입력하세요.')
+        if any(abs(v) > MAX_OFFSET_MINUTES for v in (self.start, self.end)) or not 0 <= self.reusable-self.end <= 2*MAX_OFFSET_MINUTES:
+            raise ValueError('조업 시간 입력이 허용 범위를 벗어났습니다.')
+        if active and not self.start <= self.end <= self.reusable:
             raise ValueError('조업 시작 ≤ 조업 종료 ≤ 재투입 가능 순서여야 합니다.')
-        if any(type(v) is not int or abs(v) > MAX_OFFSET_MINUTES for v in asdict(self).values()):
+        if active and abs(self.reusable) > MAX_OFFSET_MINUTES:
             raise ValueError('조업 오프셋은 ±7일 이내 정수 분으로 입력하세요.')
 
 
@@ -39,6 +43,7 @@ class Settings:
     interval: int = 60
     dep: Offsets = field(default_factory=lambda: Offsets(-50, 10, 20))
     arr: Offsets = field(default_factory=lambda: Offsets(-20, 30, 40))
+    directions: tuple[Direction, ...] = ('dep', 'arr')
 
     def validate(self):
         if self.airport not in AIRPORTS:
@@ -59,8 +64,14 @@ class Settings:
             raise ValueError('항공사는 중복 없이 최대 30개를 선택하세요.')
         if any(not re.fullmatch(r'[A-Z]{3}', code) for code in self.airlines):
             raise ValueError('항공사 코드는 영문 대문자 3자리로 입력하세요.')
-        self.dep.validate()
-        self.arr.validate()
+        if self.directions not in (('dep',), ('arr',), ('dep', 'arr')):
+            raise ValueError('출발편 또는 도착편을 하나 이상 선택하세요.')
+        self.dep.validate(active='dep' in self.directions)
+        self.arr.validate(active='arr' in self.directions)
+
+    @property
+    def direction_label(self):
+        return '·'.join(name for code, name in (('dep', '출발편'), ('arr', '도착편')) if code in self.directions)
 
     @property
     def days(self):

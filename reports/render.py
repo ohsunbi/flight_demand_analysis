@@ -67,7 +67,8 @@ def _figure(result, col_start, col_end):
     text(margin,header_top,'RAMP HANDLING / RESOURCE PLANNING',size=7.5,color='#68625e')
     text(width-margin,header_top,f'{s.start:%Y.%m.%d} ~ {s.end:%Y.%m.%d}',size=9,ha='right')
     airlines=', '.join(to_iata_codes(s.airlines)) if s.airlines else '전체 항공사'
-    airline_lines=textwrap.wrap(f'{airport} | 항공사 : {airlines}',width=55)
+    scope = f' | 분석 대상 : {s.direction_label}' if s.directions != ('dep', 'arr') else ''
+    airline_lines=textwrap.wrap(f'{airport}{scope} | 항공사 : {airlines}',width=55)
     for i,line in enumerate(airline_lines):
         text(width-margin,header_top+16+i*11,line,size=9,ha='right')
     title_y=max(header_top+36,header_top+16+len(airline_lines)*11+10)
@@ -86,7 +87,9 @@ def _figure(result, col_start, col_end):
     box(x,card_y,card_w,card_h,edge='#ded8d3')
     text(x+12,card_y+9,'출발 / 도착 편수',size=9)
     dep=sum(c.dep_count for c in result.cells); arr=sum(c.arr_count for c in result.cells)
-    text(x+card_w-12,card_y+card_h-10,f'{dep:,} / {arr:,}편',size=16,color='#c2410c',weight='bold',ha='right',va='bottom')
+    dep_label = f'{dep:,}' if 'dep' in s.directions else '—'
+    arr_label = f'{arr:,}' if 'arr' in s.directions else '—'
+    text(x+card_w-12,card_y+card_h-10,f'{dep_label} / {arr_label}편',size=16,color='#c2410c',weight='bold',ha='right',va='bottom')
     basis='STD/STA' if s.basis=='scheduled' else 'Ramp OUT/IN'
     clock=f'{s.day_start//60:02d}:{s.day_start%60:02d}'
     conditions=[('출도착 시간 기준  ',True),(basis,False),
@@ -109,6 +112,9 @@ def _figure(result, col_start, col_end):
     for i,(name,value,reference) in enumerate((('출발편',s.dep,'STD' if s.basis=='scheduled' else 'Ramp OUT'),
                                              ('도착편',s.arr,'STA' if s.basis=='scheduled' else 'Ramp IN'))):
         row_y = condition_y+28+i*17
+        if ('dep' if i == 0 else 'arr') not in s.directions:
+            inline(content_x, row_y, [(name+'   분석 제외', True)], content_width)
+            continue
         inline(content_x, row_y, [(name+'   조업 시간  ',True),
                (f'{reference} {offset_label(value.start)} ~ {reference} {offset_label(value.end)}',False),
                ('  |  조업 후 이동시간  ',True),(f'{value.reusable-value.end}분 적용',False)], content_width)
@@ -120,7 +126,8 @@ def _figure(result, col_start, col_end):
         text(margin, condition_y+72, '실제시각이 없는 편은 STD/STA 적용', size=7.5, color='#68625e')
     table_top=card_y+(184 if s.interval==30 or s.basis=='actual' else 166)
     table_height=min(height-table_top-24,s.days*28)
-    ax = fig.add_axes([.12, 1-(table_top+table_height)/height, .83, table_height/height])
+    table_bottom = 1-(table_top+table_height)/height
+    ax = fig.add_axes([.12, table_bottom, .72, table_height/height])
     values = [[c.maximum for c in row] for row in cells]
     ax.imshow([[colors.to_rgba(PALETTE[color_index(v, result.maximum)]) for v in row] for row in values],
               aspect='auto', interpolation='nearest')
@@ -145,6 +152,40 @@ def _figure(result, col_start, col_end):
     ax.grid(which='minor', color='white', linewidth=1.3)
     ax.tick_params(which='minor', length=0)
     for spine in ax.spines.values():
+        spine.set_visible(False)
+
+    # Full operating-day totals remain identical on both half-day export pages.
+    daily_counts = [
+        (sum(c.dep_count for c in result.cells[r*n:(r+1)*n]),
+         sum(c.arr_count for c in result.cells[r*n:(r+1)*n]))
+        for r in range(s.days)
+    ]
+    count_values = np.asarray(daily_counts, dtype=float)
+    # Compare dates within each direction; constant columns stay at the light end.
+    count_range = np.ptp(count_values, axis=0)
+    count_levels = np.divide(count_values-count_values.min(axis=0), count_range,
+                             out=np.zeros_like(count_values), where=count_range > 0)
+    counts_ax = fig.add_axes([.85, table_bottom, .10, table_height/height])
+    counts_ax.imshow(count_levels,
+                     cmap=colors.LinearSegmentedColormap.from_list('flight_counts', ['#fafafa', '#c6c6c6']),
+                     vmin=0, vmax=1,
+                     aspect='auto', interpolation='nearest')
+    # Match the hour row, including the blank minute row on split-page reports.
+    count_labels = [name + ('\n' if '\n' in labels[0] else '') for name in ('출발', '도착')]
+    counts_ax.set_xticks([0, 1], count_labels, fontproperties=fp, fontsize=11)
+    counts_ax.xaxis.tick_top()
+    counts_ax.set_yticks([])
+    counts_ax.tick_params(axis='both', length=0, pad=7)
+    for r, counts in enumerate(daily_counts):
+        for c, value in enumerate(counts):
+            label = str(value) if ('dep' if c == 0 else 'arr') in s.directions else '—'
+            counts_ax.text(c, r, label, ha='center', va='center',
+                           fontproperties=fp, fontsize=9, color='#242424')
+    counts_ax.set_xticks([-.5, .5, 1.5], minor=True)
+    counts_ax.set_yticks(np.arange(-.5, s.days, 1), minor=True)
+    counts_ax.grid(which='minor', color='white', linewidth=1.3)
+    counts_ax.tick_params(which='minor', length=0)
+    for spine in counts_ax.spines.values():
         spine.set_visible(False)
     return fig
 

@@ -44,11 +44,13 @@ def _display(result, index):
 <div class="detail-summary-value detail-summary-right detail-summary-demand">{cell.maximum}개 조</div>
 </div>''')
     peak_label = cell.peak.strftime('%H:%M') if cell.peak else '없음'
-    st.write(f'피크 시간 **{peak_label}** · 출발편 **{cell.dep_active}개 조** / 도착편 **{cell.arr_active}개 조**')
+    def count(direction, value, unit):
+        return f'{value}{unit}' if direction in result.settings.directions else '—'
+    st.write(f'피크 시간 **{peak_label}** · 출발편 **{count("dep", cell.dep_active, "개 조")}** / 도착편 **{count("arr", cell.arr_active, "개 조")}**')
     work_flights = cell_flights(result, index, 'work')
     dep_count = sum(f.direction == 'dep' for f in work_flights)
     arr_count = sum(f.direction == 'arr' for f in work_flights)
-    st.caption(f'해당 시간대 조업 편수 · 출발 {dep_count}편 / 도착 {arr_count}편',
+    st.caption(f'해당 시간대 조업 편수 · 출발 {count("dep", dep_count, "편")} / 도착 {count("arr", arr_count, "편")}',
                help='조업 시작부터 종료 직전까지가 선택한 시간대와 겹치는 편수입니다. 이동시간은 제외합니다. 한 편이 여러 시간대에 포함될 수 있으며, 필요 조 개수에는 이동시간도 포함됩니다.')
     interval_label = '1시간 기준' if result.settings.interval == 60 else '30분 기준'
     tabs = st.tabs(['피크 시간 기준', interval_label])

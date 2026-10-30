@@ -58,9 +58,9 @@ st.markdown('''<style>
   .st-key-run_analysis button p {font-size:18px !important}
   .st-key-dep_time_card, .st-key-arr_time_card {min-height:0}
 }
-.work-time-heading {display:flex; align-items:baseline; justify-content:space-between; margin:0 0 10px; gap:12px}
+.work-time-heading {margin:0}
+.st-key-dep_time_header, .st-key-arr_time_header {margin-bottom:10px}
 .work-time-heading strong {color:#c2410c; font-size:1rem}
-.work-time-heading span {color:#68625e; font-size:.8rem}
 .work-time-label {color:#242424; font-size:.9rem; font-weight:600; margin:0 0 4px}
 .st-key-summary_metrics [data-testid="stHorizontalBlock"] {align-items:stretch}
 .st-key-summary_metrics [data-testid="stColumn"] {box-sizing:border-box; align-self:stretch; padding:20px 20px 16px; border:1px solid #ded8d3; border-radius:10px}
@@ -79,7 +79,7 @@ if 'initial' not in st.session_state:
     st.session_state.url_error = error
 initial = st.session_state.initial
 if 'codes' not in st.session_state:
-    st.session_state.codes = ','.join(initial.airlines)
+    st.session_state.codes = ', '.join(initial.airlines)
 contract = load_contract()
 
 st.caption('RAMP HANDLING  /  RESOURCE PLANNING')
@@ -153,30 +153,37 @@ with settings_panel:
             actions = st.container(key='analysis_actions')
         direction_cols = (dep_col, arr_col)
         offsets = []
+        directions = []
         for direction_col, name, value, prefix in zip(direction_cols, ['출발', '도착'], [initial.dep, initial.arr], ['dep', 'arr']):
             reference_label = ('STD' if prefix == 'dep' else 'STA') if basis == 'scheduled' else ('RAMP OUT' if prefix == 'dep' else 'RAMP IN')
             with direction_col, st.container(border=False, key=f'{prefix}_time_card'):
-                st.html(f'<div class="work-time-heading"><strong>{name}편 시간 설정</strong><span>단위: 분</span></div>')
+                with st.container(horizontal=True, horizontal_alignment='distribute', vertical_alignment='center', key=f'{prefix}_time_header'):
+                    st.html(f'<div class="work-time-heading"><strong>{name}편 시간 설정</strong></div>', width='content')
+                    included = st.checkbox('사용', value=prefix in initial.directions, key=f'{prefix}_included')
+                if included:
+                    directions.append(prefix)
                 row = st.columns(3, gap='small')
                 vals = []
                 for col, label, key, v in zip(row[:2], ['조업 시작', '조업 종료'], ['start', 'end'], [value.start, value.end]):
                     with col:
                         st.html(f'<p class="work-time-label">{label}</p>')
                         minutes = st.number_input(f'{name}편 {label} (분)', min_value=-10080, max_value=10080,
-                                                  value=v, step=1, key=f'{prefix}_{key}', label_visibility='collapsed')
+                                                  value=v, step=1, key=f'{prefix}_{key}', label_visibility='collapsed', disabled=not included)
                         st.caption(f'{reference_label} {abs(minutes)}분 {"전" if minutes < 0 else "후"}' if minutes else f'{reference_label} 시각')
                         vals.append(minutes)
                 with row[2]:
                     st.html('<p class="work-time-label">이동소요 시간</p>')
                     travel = st.number_input(f'{name}편 이동소요 시간 (분)', min_value=0, max_value=20160,
                                              value=value.reusable-value.end, step=1, key=f'{prefix}_travel',
-                                             label_visibility='collapsed', help='조업 종료 후 다음 작업에 투입되기까지 필요한 시간입니다.')
+                                             label_visibility='collapsed', disabled=not included, help='조업 종료 후 다음 작업에 투입되기까지 필요한 시간입니다.')
                     st.caption(f'조업 종료 후 {travel}분')
             offsets.append(Offsets(vals[0], vals[1], vals[1]+travel))
 
 settings = None
 invalid_offsets = []
-for name, value in zip(('출발편', '도착편'), offsets):
+for direction, name, value in zip(('dep', 'arr'), ('출발편', '도착편'), offsets):
+    if direction not in directions:
+        continue
     if value.start > value.end:
         invalid_offsets.append(f'{name}: 조업 시작은 조업 종료보다 늦을 수 없습니다.')
     if abs(value.reusable) > 10080:
@@ -187,7 +194,7 @@ try:
     if start is None or end is None:
         raise ValueError('시작일과 종료일을 모두 선택하세요.')
     airlines = parse_icao_codes(codes)
-    settings = Settings(airport, start, end, mode, airlines, basis, ds, interval, *offsets)
+    settings = Settings(airport, start, end, mode, airlines, basis, ds, interval, *offsets, directions=tuple(directions))
     tasks = plan(settings, actual_query_padding_days=(contract.actual_query_padding_days or 0) if basis == 'actual' else 0)
     params = encode(settings)
     if dict(st.query_params) != params:
@@ -263,6 +270,8 @@ if result is None:
     st.stop()
 
 applied = result.settings
+def direction_count(direction, value):
+    return str(value) if direction in applied.directions else '—'
 dirty = settings is None or settings.signature != applied.signature
 if (not dirty and 'job' not in st.session_state and not st.session_state.get('job_error')
         and st.session_state.get('completed_result_id') == result.result_id):
@@ -270,6 +279,8 @@ if (not dirty and 'job' not in st.session_state and not st.session_state.get('jo
 if dirty:
     st.info('입력 조건이 변경되었습니다. 아래는 이전 조회 결과입니다. 새 조건을 적용하려면 분석 실행을 누르세요.')
 name, iata = AIRPORTS[applied.airport]
+if applied.directions != ('dep', 'arr'):
+    st.caption(f'분석 대상: {applied.direction_label}')
 st.divider()
 st.caption(f'적용 결과 · {name} {iata} · {applied.start} ~ {applied.end} · {"전체 항공사" if not applied.airlines else ", ".join(to_iata_codes(applied.airlines))} · {"계획 (STA/STD)" if applied.basis == "scheduled" else "실제 (RAMP IN/OUT)"} · 분석 간격 {applied.interval}분')
 if result.synthetic:
@@ -283,7 +294,7 @@ with st.container(key='summary_metrics'):
             st.metric(label, f'{maximum}개 조', help='한국시간 기준 오전 00:00부터 12:00 미만, 오후 12:00부터 다음 날 00:00 미만입니다. 분석 범위에 포함된 구간만 집계합니다.')
             st.html(occurrence_dates(dates))
     with metrics[2], st.container(border=False, key='summary_flights'):
-        st.metric('출발 / 도착 편수', f'{sum(c.dep_count for c in result.cells)} / {sum(c.arr_count for c in result.cells)}')
+        st.metric('출발 / 도착 편수', f'{direction_count("dep", sum(c.dep_count for c in result.cells))} / {direction_count("arr", sum(c.arr_count for c in result.cells))}')
 if applied.basis == 'actual':
     st.caption(f'기간 편수 기준: 실제시각 사용 {result.diagnostics.actual_used}편 (그중 실제 날짜 추정 {result.diagnostics.actual_date_inferred}편) · 예정 대체 {result.diagnostics.scheduled_used}편')
     if result.diagnostics.actual_date_inferred:
@@ -295,8 +306,8 @@ with left:
     title_col.subheader('시간대별 조업조 수요')
     from reports.render import lazy_download, output_stem
     saved_exports = st.session_state.get('export_cache')
-    if saved_exports is None or saved_exports[0] != result.result_id or len(saved_exports) < 3 or saved_exports[2] != 'unified-a4-v10':
-        saved_exports = (result.result_id, {}, 'unified-a4-v10')
+    if saved_exports is None or saved_exports[0] != result.result_id or len(saved_exports) < 3 or saved_exports[2] != 'unified-a4-v14':
+        saved_exports = (result.result_id, {}, 'unified-a4-v14')
         st.session_state.export_cache = saved_exports
     export_disabled = not result.exportable or settings is None
     stem = output_stem(result)

@@ -45,7 +45,7 @@ def test_bad_query_codes_block(code):
                                   {'v':'2','airlines':''}, {'v':'1','airlines':'JJA'}])
 def test_old_url_versions_are_rejected(params):
     restored,error = decode(params,date(2026,10,29))
-    assert error and restored.airlines == ('AXM','JJA','TTW')
+    assert error and restored.airlines == ('JJA','TTW','AXM')
 
 
 def test_duplicate_display_codes_do_not_change_query_identity(monkeypatch):

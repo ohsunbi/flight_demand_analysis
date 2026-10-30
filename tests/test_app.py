@@ -76,7 +76,7 @@ def test_initial_app_does_not_fetch_automatically(monkeypatch):
     assert app.radio(key='interval').value==60
     assert not app.text_input(key='codes').disabled
     assert all(r.key != 'airline_mode' for r in app.radio)
-    assert app.text_input(key='codes').value=='AXM,JJA,TTW'
+    assert app.text_input(key='codes').value=='JJA, TTW, AXM'
     assert all(not b.disabled for b in app.button)
     assert app.radio(key='basis').options==['계획 (STA/STD)', '실제 (RAMP IN/OUT)']
     assert app.selectbox(key='day_start').options==[f'{v//60:02d}:{v%60:02d}' for v in range(0,1440,30)]
@@ -84,7 +84,7 @@ def test_initial_app_does_not_fetch_automatically(monkeypatch):
     actual.query_params.update(dict(mode='custom',start='2026-10-26',end='2026-10-26',basis='actual',airlines='KAL,ESR'))
     actual.run()
     assert not actual.exception
-    assert actual.text_input(key='codes').value=='ESR,KAL'
+    assert actual.text_input(key='codes').value=='ESR, KAL'
     assert not any('조회 단위' in c.value or '주소창 URL' in c.value for c in actual.caption)
     assert [b.label for b in actual.button]==['새로 조회','분석 실행']
     assert not actual.button[0].disabled
@@ -174,7 +174,7 @@ def test_unlisted_icao_and_unsupported_url_do_not_fetch(monkeypatch):
     legacy.run()
     assert not legacy.exception
     assert legacy.warning
-    assert legacy.text_input(key='codes').value == 'AXM,JJA,TTW'
+    assert legacy.text_input(key='codes').value == 'JJA, TTW, AXM'
     assert legacy.query_params['v'] == ['3']
     assert legacy.query_params['airlines'] == ['AXM,JJA,TTW']
     assert 'job' not in legacy.session_state
