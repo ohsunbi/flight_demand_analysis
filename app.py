@@ -44,11 +44,25 @@ st.markdown('''<style>
 .st-key-analysis_actions [data-testid="stButton"],
 .st-key-analysis_actions [data-testid="stTooltipHoverTarget"],
 .st-key-analysis_actions button {width:100% !important; max-width:none !important}
+.st-key-run_analysis button[kind="primary"]:hover,
+.st-key-run_analysis button[kind="primary"]:focus,
+.st-key-run_analysis button[kind="primary"]:focus-visible,
+.st-key-run_analysis button[kind="primary"]:active,
+.st-key-run_analysis button[kind="primary"]:disabled,
+.st-key-run_analysis [data-testid="stBaseButton-primary"]:hover,
+.st-key-run_analysis [data-testid="stBaseButton-primary"]:focus,
+.st-key-run_analysis [data-testid="stBaseButton-primary"]:focus-visible,
+.st-key-run_analysis [data-testid="stBaseButton-primary"]:active,
+.st-key-run_analysis [data-testid="stBaseButton-primary"]:disabled {
+  background-color:#7c2d12 !important; border-color:#7c2d12 !important; color:#fff !important; opacity:1 !important
+}
 .st-key-refresh_data button {height:80px !important}
 .st-key-run_analysis button {height:120px !important}
 .st-key-refresh_data button, .st-key-run_analysis button {display:flex; align-items:center; justify-content:center}
 .st-key-refresh_data button p {font-size:17px !important; font-weight:500; line-height:1.4}
 .st-key-run_analysis button p {font-size:20px !important; font-weight:700; line-height:1.4}
+div[data-testid="stProgress"] div[role="progressbar"] {height:16px !important; min-height:16px !important}
+div[data-testid="stProgress"] div[role="progressbar"] > div {height:100% !important}
 .st-key-dep_time_card, .st-key-arr_time_card {box-sizing:border-box; min-height:212px; border:1px solid #ded8d3; border-radius:10px; padding:16px}
 .st-key-work_times [data-testid="stColumn"]:has(> div .st-key-analysis_actions) {flex:0 0 180px; min-width:180px; max-width:180px; align-self:stretch}
 @media (max-width:1100px) {

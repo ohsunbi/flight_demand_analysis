@@ -1,4 +1,4 @@
-"""Complete date/direction snapshots, local airline selection and bounded fallback."""
+"""Complete date/direction snapshots and local airline selection."""
 import re
 from dataclasses import replace
 
@@ -26,7 +26,7 @@ def collect(settings, client, contract, *, refresh=False, cancel=None, progress=
     tasks = plan(settings, actual_query_padding_days=padding or 0)
     total, completed = len(tasks), 0
     batches = []
-    fallback_groups = 0
+    unclassifiable_rows = 0
 
     def fetch(task):
         nonlocal completed
@@ -34,8 +34,8 @@ def collect(settings, client, contract, *, refresh=False, cancel=None, progress=
         if completed >= MAX_QUERY_TASKS:
             raise CollectionError('원본 조회 단위가 운영 제한을 초과했습니다.')
         if progress:
-            scope = task.airline or '전체'
-            progress(completed, total, f'{task.day} {"출발" if task.direction == "dep" else "도착"} {scope} 수집')
+            direction = '출발' if task.direction == 'dep' else '도착'
+            progress(completed, total, f'{task.day} {direction} 데이터 수집 중')
         batch = client.fetch(settings.airport, task, refresh=refresh, cancel=cancel)
         completed += 1
         check_cancel(cancel)
@@ -54,23 +54,13 @@ def collect(settings, client, contract, *, refresh=False, cancel=None, progress=
             check_cancel(cancel)
             match = _FLIGHT_ID.fullmatch(str(record.get('fpId') or '').strip().upper())
             if match is None:
-                break
+                unclassifiable_rows += 1
+                continue
             if match.group(1) in selected:
                 selected[match.group(1)].append(record)
-        else:
-            # These batch labels identify the selection, not additional HTTP requests.
-            batches.extend(replace(snapshot, airline=code, records=tuple(selected[code]))
-                           for code in settings.airlines)
-            continue
-
-        # A missing/nonstandard identifier cannot safely be excluded. Re-query every
-        # selected airline for this complete group; never mix partial local selection.
-        total += len(settings.airlines)
-        if total > MAX_QUERY_TASKS:
-            raise CollectionError('항공사 개별 대조에 필요한 조회 단위가 운영 제한을 초과했습니다.')
-        fallback_groups += 1
-        for code in settings.airlines:
-            batches.append(fetch(Task(task.day, task.direction, code)))
+        # These labels identify the local selection, not additional HTTP requests.
+        batches.extend(replace(snapshot, airline=code, records=tuple(selected[code]))
+                       for code in settings.airlines)
 
     check_cancel(cancel)
-    return tuple(batches), completed, fallback_groups
+    return tuple(batches), completed, unclassifiable_rows

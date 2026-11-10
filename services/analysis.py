@@ -27,19 +27,19 @@ def load_contract():
 
 def run_analysis(settings, client, contract, *, refresh=False, cancel=None, progress=None):
     snapshots = [] if settings.quick_turn_active else None
-    batches, queries, fallback_groups = collect(settings, client, contract, refresh=refresh,
-                                               cancel=cancel, progress=progress, context=snapshots)
+    batches, queries, unclassifiable_rows = collect(settings, client, contract, refresh=refresh,
+                                                    cancel=cancel, progress=progress, context=snapshots)
     check_cancel(cancel)
     if progress:
         progress(queries, queries, '정규화·수요 계산')
     flights, diag = normalize(batches, settings, contract)
-    if fallback_groups:
-        diag.messages.append(f'편명 판별이 어려운 {fallback_groups}개 날짜·방향은 항공사별 개별 조회로 대조했습니다.')
+    if unclassifiable_rows:
+        diag.messages.append(f'ICAO 접두어를 판별할 수 없는 {unclassifiable_rows}건은 항공사 선별에서 제외했습니다.')
     blockers = []
     if not contract.verified:
         blockers.append('원본 시간대·조회 날짜·결항 규칙이 미검증되어 잠정 결과입니다. 정식 보고서 출력은 보류됩니다.')
     if not contract.airline_prefix_verified:
-        diag.messages.append('항공사는 원본 편명의 ICAO 접두어로 선별하며 판별이 어려우면 UBIKAIS 개별 조회를 사용합니다. 실제 운항사·공동운항 연결을 추정하지 않습니다.')
+        diag.messages.append('항공사는 원본 편명의 ICAO 접두어로 선별하며 접두어를 판별할 수 없는 행은 제외합니다. 실제 운항사·공동운항 연결을 추정하지 않습니다.')
     if settings.basis == 'actual' and (not contract.query_date_verified or contract.actual_query_padding_days is None):
         blockers.append('실제일자가 달라진 지연편의 조회 범위를 확인하지 못했습니다.')
     if diag.conflicts or diag.quarantined:
@@ -48,7 +48,7 @@ def run_analysis(settings, client, contract, *, refresh=False, cancel=None, prog
     check_cancel(cancel)
     result = analyze(settings, flights, diag, min(b.fetched_at for b in batches), max(b.fetched_at for b in batches),
                      blockers=blockers, context=context, check=lambda: check_cancel(cancel))
-    digest = hashlib.sha256(b'collection-v2/normalization-v2/engine-v2/turnaround-v1')
+    digest = hashlib.sha256(b'collection-v3/normalization-v2/engine-v2/turnaround-v1')
     digest.update(contract.actual_date_policy.encode())
     for batch in batches:
         digest.update(json.dumps([str(batch.query_date),batch.direction,batch.airline,batch.records],sort_keys=True,default=str).encode())

@@ -72,38 +72,24 @@ def test_whole_selection_matches_individual_normalization_and_engine(basis, inte
 
 
 @pytest.mark.parametrize('identifier', ['', '12345', 'JJA-001', 'JJA001AB', None])
-def test_unclassifiable_whole_group_is_replaced_by_individual_queries(identifier):
-    class FallbackClient(Client):
+def test_unclassifiable_whole_rows_are_excluded_without_individual_queries(identifier):
+    class WholeClient(Client):
         def fetch(self, airport, task, **kwargs):
             self.calls.append((task,kwargs))
             records = ()
             if task.day == DAY:
-                if not task.airline:
-                    records = (row(),dict(row('OTHER'),fpId=identifier))
-                else:
-                    records = (row(task.airline),)
+                records = (row(),dict(row('OTHER'),fpId=identifier))
             return Batch(task.day,task.direction,task.airline,records,AT)
     s = settings()
-    client = FallbackClient(())
+    client = WholeClient(())
     result = run_analysis(s,client,VERIFIED,refresh=True)
-    assert len(client.calls) == len(plan(s))+4
+    assert len(client.calls) == len(plan(s))
+    assert all(not task.airline for task,_ in client.calls)
     assert all(kwargs['refresh'] for _,kwargs in client.calls)
-    assert sum(cell.dep_count for cell in result.cells) == 2
-    assert sum(cell.arr_count for cell in result.cells) == 2
+    assert sum(cell.dep_count for cell in result.cells) == 1
+    assert sum(cell.arr_count for cell in result.cells) == 1
     assert result.exportable
-    assert any('개별 조회' in message for message in result.diagnostics.messages)
-
-
-def test_failed_individual_fallback_never_returns_partial_analysis():
-    class Failed(Client):
-        def fetch(self, airport, task, **kwargs):
-            if task.day == DAY and task.airline == 'TTW':
-                raise CollectionError('fixture failure')
-            self.calls.append((task,kwargs))
-            records = (dict(row(),fpId=''),) if task.day == DAY else ()
-            return Batch(task.day,task.direction,task.airline,records,AT)
-    with pytest.raises(CollectionError,match='fixture failure'):
-        run_analysis(settings(),Failed(()),VERIFIED)
+    assert any('판별할 수 없는 2건' in message for message in result.diagnostics.messages)
 
 
 def test_collection_failure_is_not_treated_as_a_reason_to_retry_other_airlines():
@@ -117,7 +103,7 @@ def test_collection_failure_is_not_treated_as_a_reason_to_retry_other_airlines()
     assert len(client.calls) == 1
 
 
-def test_cancel_after_whole_fetch_prevents_selection_and_fallback():
+def test_cancel_after_whole_fetch_prevents_local_selection():
     event = Event()
     class Stop(Client):
         def fetch(self, airport, task, **kwargs):
@@ -136,24 +122,24 @@ def test_raw_date_drift_is_checked_before_selection():
         collect(settings(),client,VERIFIED)
 
 
-@pytest.mark.parametrize('planned,allowed', [(998,True),(999,False)])
-def test_1000_unit_budget_counts_whole_and_individual_queries(monkeypatch, planned, allowed):
+@pytest.mark.parametrize('planned,allowed', [(1000,True),(1001,False)])
+def test_1000_unit_budget_limits_whole_snapshot_queries(monkeypatch, planned, allowed):
     from services import collection
     assert collection.MAX_QUERY_TASKS == 1000
     monkeypatch.setattr(collection,'plan',lambda *a,**k: (Task(DAY,'dep'),)*planned)
-    class OneFallback(Client):
+    class ManyWhole(Client):
         def fetch(self, airport, task, **kwargs):
             self.calls.append((task,kwargs))
             records = (dict(row(),fpId=''),) if len(self.calls) == 1 else ()
             return Batch(task.day,task.direction,task.airline,records,AT)
-    client = OneFallback(())
+    client = ManyWhole(())
     if allowed:
-        _,count,fallbacks = collect(settings(),client,VERIFIED)
-        assert count == 1000 and fallbacks == 1 and len(client.calls) == 1000
+        _,count,unclassifiable = collect(settings(),client,VERIFIED)
+        assert count == 1000 and unclassifiable == 1 and len(client.calls) == 1000
     else:
         with pytest.raises(CollectionError,match='운영 제한'):
             collect(settings(),client,VERIFIED)
-        assert len(client.calls) == 1
+        assert len(client.calls) == 1000
 
 
 def test_whole_cache_is_shared_without_selection_leakage_and_refresh_bypasses_it(monkeypatch,tmp_path):
