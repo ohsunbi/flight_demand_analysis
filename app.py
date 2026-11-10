@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import calendar
+from html import escape
 import os
 from dataclasses import asdict
 from datetime import date, datetime
@@ -20,7 +21,7 @@ from ui.summary import occurrence_dates
 from ui.help import display_help
 from ui.url_state import decode, encode
 
-st.set_page_config(page_title='시간대별 램프조업 수요 분석', page_icon='✈', layout='wide')
+st.set_page_config(page_title='시간대별 램프조업 수요 분석', page_icon='✈', layout='wide', initial_sidebar_state='auto')
 st.markdown('''<style>
 .block-container {padding-top:3.5rem; max-width:1800px}
 .app-header {margin:0 0 12px}
@@ -34,16 +35,32 @@ st.markdown('''<style>
 }
 [data-testid="stMetricValue"] {color:#c2410c}
 [data-testid="stSidebar"] {background:#f7f5f3}
-.st-key-analysis_settings [data-testid="stVerticalBlock"] {gap:.5rem}
-.st-key-analysis_settings hr {margin:.4rem 0}
-.settings-section-title {display:flex; align-items:center; gap:8px; margin:0; padding:0; color:#242424; font-size:18px; line-height:1.4; font-weight:700; letter-spacing:-.02em}
+.st-key-analysis_settings [data-testid="stVerticalBlock"] {gap:.8rem}
+.st-key-analysis_settings hr {margin:.65rem 0}
+.st-key-mode [data-testid="stWidgetLabel"], .st-key-interval [data-testid="stWidgetLabel"] {margin-bottom:.1rem !important}
+.settings-section-title {display:flex; align-items:center; gap:8px; margin:0; padding:.75rem 0; color:#242424; font-size:18px; line-height:1.4; font-weight:700; letter-spacing:-.02em}
 .settings-section-title::before {content:""; flex:0 0 6px; height:6px; background:#f15922; border-radius:1px}
-.st-key-work_times {padding-top:12px}
-.st-key-analysis_actions {width:180px !important; margin-left:auto; display:flex !important; flex-direction:column; gap:12px !important}
+.st-key-analysis_launch {padding:12px; margin-bottom:.45rem; background:#fff; border:1px solid #e3ddd8; border-radius:12px}
+.st-key-analysis_launch [data-testid="stVerticalBlock"] {gap:.35rem}
+.st-key-analysis_launch hr {margin:.1rem 0 .25rem}
+.analysis-condition-row {display:block}
+.analysis-launch-title {margin:0 0 8px; color:#34302e; font-size:.9rem; font-weight:700; line-height:1.4}
+.st-key-analysis_actions {display:flex !important; flex-direction:column; gap:12px !important}
+.st-key-analysis_summary [data-testid="stVerticalBlock"] {gap:.1rem !important}
+.analysis-condition-chips {display:flex; flex-wrap:wrap; gap:6px}
+.analysis-condition-chip {display:inline-block; max-width:100%; padding:3px 7px; border-radius:4px; color:#49423c; font-size:.76rem; line-height:1.35; overflow-wrap:anywhere}
+.analysis-condition-chip--airport {background:#f5dfdc}
+.analysis-condition-chip--period {background:#f3e7c2}
+.analysis-condition-chip--detail {background:#e8e8e8}
+.st-key-refresh_action {padding-top:.65rem}
 .st-key-analysis_actions [data-testid="stElementContainer"],
 .st-key-analysis_actions [data-testid="stButton"],
 .st-key-analysis_actions [data-testid="stTooltipHoverTarget"],
 .st-key-analysis_actions button {width:100% !important; max-width:none !important}
+.st-key-run_analysis button[kind="primary"],
+.st-key-run_analysis [data-testid="stBaseButton-primary"] {
+  background-color:#b84e2b !important; border-color:#b84e2b !important; color:#fff !important
+}
 .st-key-run_analysis button[kind="primary"]:hover,
 .st-key-run_analysis button[kind="primary"]:focus,
 .st-key-run_analysis button[kind="primary"]:focus-visible,
@@ -54,29 +71,19 @@ st.markdown('''<style>
 .st-key-run_analysis [data-testid="stBaseButton-primary"]:focus-visible,
 .st-key-run_analysis [data-testid="stBaseButton-primary"]:active,
 .st-key-run_analysis [data-testid="stBaseButton-primary"]:disabled {
-  background-color:#7c2d12 !important; border-color:#7c2d12 !important; color:#fff !important; opacity:1 !important
+  background-color:#9e3f24 !important; border-color:#9e3f24 !important; color:#fff !important; opacity:1 !important
 }
-.st-key-refresh_data button {height:80px !important}
-.st-key-run_analysis button {height:120px !important}
+.st-key-refresh_data button {height:44px !important}
+.st-key-run_analysis button {height:52px !important}
 .st-key-refresh_data button, .st-key-run_analysis button {display:flex; align-items:center; justify-content:center}
-.st-key-refresh_data button p {font-size:17px !important; font-weight:500; line-height:1.4}
-.st-key-run_analysis button p {font-size:20px !important; font-weight:700; line-height:1.4}
+.st-key-refresh_data button p {font-size:15px !important; font-weight:500; line-height:1.4}
+.st-key-run_analysis button p {font-size:17px !important; font-weight:700; line-height:1.4}
 div[data-testid="stProgress"] div[role="progressbar"] {height:16px !important; min-height:16px !important}
 div[data-testid="stProgress"] div[role="progressbar"] > div {height:100% !important}
-.st-key-dep_time_card, .st-key-arr_time_card {box-sizing:border-box; min-height:212px; border:1px solid #ded8d3; border-radius:10px; padding:16px}
-.st-key-work_times [data-testid="stColumn"]:has(> div .st-key-analysis_actions) {flex:0 0 180px; min-width:180px; max-width:180px; align-self:stretch}
-@media (max-width:1100px) {
-  .st-key-work_times [data-testid="stColumn"]:has(> div .st-key-analysis_actions) {flex:1 0 100%; min-width:100%; max-width:100%}
-  .st-key-refresh_data button {height:48px !important}
-  .st-key-run_analysis button {height:56px !important}
-  .st-key-refresh_data button p {font-size:16px !important}
-  .st-key-run_analysis button p {font-size:18px !important}
-  .st-key-dep_time_card, .st-key-arr_time_card {min-height:0}
-}
-.work-time-heading {margin:0}
-.st-key-dep_time_header, .st-key-arr_time_header {margin-bottom:10px}
+.st-key-dep_time_card, .st-key-arr_time_card {box-sizing:border-box; border:1px solid #ded8d3; border-radius:10px; padding:15px}
+.st-key-arr_time_card {margin-top:14px}
+.work-time-heading {margin:0 0 6px}
 .work-time-heading strong {color:#c2410c; font-size:1rem}
-.work-time-label {color:#242424; font-size:.9rem; font-weight:600; margin:0 0 4px}
 .st-key-summary_metrics [data-testid="stHorizontalBlock"] {align-items:stretch}
 .st-key-summary_metrics [data-testid="stColumn"] {box-sizing:border-box; align-self:stretch; padding:20px 20px 16px; border:1px solid #ded8d3; border-radius:10px}
 .summary-date-label {color:#68625e; font-size:13px; font-weight:400; white-space:nowrap}
@@ -85,7 +92,10 @@ div[data-testid="stProgress"] div[role="progressbar"] > div {height:100% !import
 .summary-month {color:#68625e; font-size:14px; font-weight:400; white-space:nowrap}
 .summary-day {white-space:nowrap}
 .summary-weekday {font-size:13px; font-weight:400; color:#68625e}
-.st-key-work_times [data-testid="stCaptionContainer"] p {color:#68625e; font-size:.8rem; line-height:1.5}
+@media (max-width:1100px) {
+  [data-testid="stMain"] [data-testid="stHorizontalBlock"] {flex-direction:column}
+  [data-testid="stMain"] [data-testid="stColumn"] {width:100% !important; min-width:0 !important; flex:1 1 100% !important}
+}
 </style>''', unsafe_allow_html=True)
 
 if 'initial' not in st.session_state:
@@ -111,13 +121,18 @@ def airport_changed():
     st.session_state.codes = ', '.join(airport_airlines(st.session_state.airport))
 
 
-settings_panel = st.container(border=True, key='analysis_settings')
-with settings_panel:
-    target_col, period_col, time_col = st.columns(3, gap='medium')
-    with target_col:
+with st.sidebar:
+    launch_panel = st.container(key='analysis_launch')
+    with launch_panel:
+        action_summary = st.container(key='analysis_summary')
+        actions = st.container(key='analysis_actions')
+        action_feedback = st.container(key='action_feedback')
+    settings_panel = st.container(key='analysis_settings')
+    with settings_panel:
+        st.divider()
         st.html('<h2 class="settings-section-title">조회 대상</h2>')
         airport = st.selectbox('공항', list(AIRPORTS), index=list(AIRPORTS).index(initial.airport),
-                               format_func=lambda x: f'{AIRPORTS[x][0]} · {AIRPORTS[x][1] or x} ({x})', key='airport', width=360,
+                               format_func=lambda x: f'{AIRPORTS[x][0]} · {AIRPORTS[x][1] or x} ({x})', key='airport',
                                on_change=airport_changed)
         try:
             preview_input = st.session_state.get('codes', ','.join(initial.airlines))
@@ -134,83 +149,75 @@ with settings_panel:
             code_help.append(f'변환 정보 없음: {", ".join(unknown)}')
         if not preview_codes:
             code_help.append('항공사 코드를 입력·확인하세요.')
-        codes = st.text_input('항공사 코드 (ICAO 3자리)', value=None, placeholder='JJA, TTW, AXM', key='codes', width=360,
+        codes = st.text_input('항공사 코드 (ICAO 3자리)', value=None, placeholder='JJA, TTW, AXM', key='codes',
                               help='\n\n'.join(code_help))
-    with period_col:
+        st.divider()
         st.html('<h2 class="settings-section-title">조회 기간</h2>')
         mode = st.radio('기간 선택', ['month', 'custom'], index=0 if initial.mode == 'month' else 1,
                         format_func=lambda x: '월별' if x == 'month' else '사용자 지정', horizontal=True, key='mode')
         if mode == 'month':
-            with st.container(width=360):
-                ycol, mcol = st.columns(2)
-                year = ycol.number_input('연도', min_value=2000, max_value=2100, value=initial.start.year, step=1, key='year')
-                month = mcol.selectbox('월', list(range(1,13)), index=initial.start.month-1, key='month')
+            ycol, mcol = st.columns(2)
+            year = ycol.number_input('연도', min_value=2000, max_value=2100, value=initial.start.year, step=1, key='year')
+            month = mcol.selectbox('월', list(range(1,13)), index=initial.start.month-1, key='month')
             start = date(year, month, 1); end = date(year, month, calendar.monthrange(year, month)[1])
         else:
-            dates = st.date_input('시작일 ~ 종료일 (최대 31일)', value=(initial.start, initial.end), format='YYYY-MM-DD', key='dates', width=360)
+            dates = st.date_input('시작일 ~ 종료일 (최대 31일)', value=(initial.start, initial.end), format='YYYY-MM-DD', key='dates')
             start, end = (dates[0], dates[-1]) if len(dates) == 2 else (None, None)
-    with time_col:
-        can_turn = (st.session_state.get('basis', initial.basis) == 'actual'
-                    and st.session_state.get('dep_included', 'dep' in initial.directions)
-                    and st.session_state.get('arr_included', 'arr' in initial.directions))
-        requested_turn = st.session_state.get('quick_turn', initial.quick_turn)
-        requested_limit = st.session_state.get('turn_limit', initial.turn_limit)
-        with st.container(horizontal=True, horizontal_alignment='distribute', vertical_alignment='center', key='time_settings_header'):
-            st.html('<h2 class="settings-section-title">시간 설정</h2>', width='content')
-            turn_menu = st.popover(f'퀵턴 {requested_limit}분' if requested_turn and can_turn else '퀵턴 미적용',
-                                  disabled=not can_turn, key='turn_settings',
-                                  help='실제 (RAMP IN/OUT) 기준에서 출발·도착을 모두 사용할 때 적용합니다.')
-        with turn_menu:
-            quick_turn = st.checkbox('퀵턴 반영', value=initial.quick_turn, key='quick_turn', disabled=not can_turn)
-            turn_limit = st.number_input('제한시간 (분)', min_value=1, max_value=360,
-                                         value=initial.turn_limit, step=1, key='turn_limit', disabled=not quick_turn or not can_turn)
-            if quick_turn:
-                st.caption(f'RAMP IN ~ RAMP OUT {turn_limit}분 이내 · REG·SPOT 일치')
-                st.caption('대기시간도 같은 조가 연속 점유하며, 마지막 출발편 이동시간만 적용합니다.')
+        st.divider()
+        st.html('<h2 class="settings-section-title">분석 조건</h2>')
         basis = st.radio('분석 기준시각', ['scheduled', 'actual'], index=0 if initial.basis == 'scheduled' else 1,
                          format_func=lambda x: '계획 (STA/STD)' if x == 'scheduled' else '실제 (RAMP IN/OUT)',
-                         horizontal=True, key='basis', help='실제는 RAMP IN/OUT 기준이며, 값이 없으면 STA/STD를 사용합니다.')
-        interval_col, day_col = st.columns(2)
-        interval = interval_col.radio('분석 간격', [60, 30], index=0 if initial.interval == 60 else 1,
-                                     format_func=lambda x: f'{x}분', horizontal=True, key='interval')
+                         key='basis', help='실제는 RAMP IN/OUT 기준이며, 값이 없으면 STA/STD를 사용합니다.')
+        quick_turn_panel = st.container(key='quick_turn_panel')
+        interval = st.radio('분석 간격', [60, 30], index=0 if initial.interval == 60 else 1,
+                            format_func=lambda x: f'{x}분', horizontal=True, key='interval')
         day_starts = sorted(set(range(0, 1440, 30)) | {initial.day_start})
-        ds = day_col.selectbox('조업 개시 시간', day_starts, index=day_starts.index(initial.day_start),
-                               format_func=lambda v: f'{v//60:02d}:{v%60:02d}', key='day_start', width=160,
-                               help='한국시간 기준, 선택한 시각부터 24시간을 하루로 집계합니다. 예: 06:00부터 다음 날 06:00까지. 기존 URL의 분 단위 값은 그대로 복원합니다.')
-    st.divider()
-    with st.container(key='work_times'):
-        dep_col, arr_col, action_col = st.columns([1, 1, .32], gap='medium')
-        with action_col:
-            actions = st.container(key='analysis_actions')
-        direction_cols = (dep_col, arr_col)
+        ds = st.selectbox('조업 개시 시간', day_starts, index=day_starts.index(initial.day_start),
+                          format_func=lambda v: f'{v//60:02d}:{v%60:02d}', key='day_start',
+                          help='한국시간 기준, 선택한 시각부터 24시간을 하루로 집계합니다. 예: 06:00부터 다음 날 06:00까지. 기존 URL의 분 단위 값은 그대로 복원합니다.')
+        st.divider()
+        st.html('<h2 class="settings-section-title">분석 대상</h2>')
         offsets = []
-        directions = []
-        for direction_col, name, value, prefix in zip(direction_cols, ['출발', '도착'], [initial.dep, initial.arr], ['dep', 'arr']):
+        dep_included = arr_included = False
+        for name, value, prefix in (('출발', initial.dep, 'dep'), ('도착', initial.arr, 'arr')):
             reference_label = ('STD' if prefix == 'dep' else 'STA') if basis == 'scheduled' else ('RAMP OUT' if prefix == 'dep' else 'RAMP IN')
-            with direction_col, st.container(border=False, key=f'{prefix}_time_card'):
-                with st.container(horizontal=True, horizontal_alignment='distribute', vertical_alignment='center', key=f'{prefix}_time_header'):
-                    st.html(f'<div class="work-time-heading"><strong>{name}편 시간 설정</strong></div>', width='content')
-                    included = st.checkbox('사용', value=prefix in initial.directions, key=f'{prefix}_included')
-                if included:
-                    directions.append(prefix)
-                row = st.columns(3, gap='small')
+            with st.container(border=False, key=f'{prefix}_time_card'):
+                st.html(f'<div class="work-time-heading"><strong>{name}편 시간 설정</strong></div>')
+                included = st.checkbox(f'{name}편 사용', value=prefix in initial.directions, key=f'{prefix}_included')
+                if prefix == 'dep':
+                    dep_included = included
+                else:
+                    arr_included = included
                 vals = []
-                for col, label, key, v in zip(row[:2], ['조업 시작', '조업 종료'], ['start', 'end'], [value.start, value.end]):
-                    with col:
-                        st.html(f'<p class="work-time-label">{label}</p>')
-                        minutes = st.number_input(f'{name}편 {label} (분)', min_value=-10080, max_value=10080,
-                                                  value=v, step=1, key=f'{prefix}_{key}', label_visibility='collapsed', disabled=not included)
-                        st.caption(f'{reference_label} {abs(minutes)}분 {"전" if minutes < 0 else "후"}' if minutes else f'{reference_label} 시각')
-                        vals.append(minutes)
-                with row[2]:
-                    st.html('<p class="work-time-label">이동소요 시간</p>')
-                    travel = st.number_input(f'{name}편 이동소요 시간 (분)', min_value=0, max_value=20160,
-                                             value=value.reusable-value.end, step=1, key=f'{prefix}_travel',
-                                             label_visibility='collapsed', disabled=not included, help='조업 종료 후 다음 작업에 투입되기까지 필요한 시간입니다.')
-                    st.caption(f'조업 종료 후 {travel}분')
+                for label, key, v in (('조업 시작', 'start', value.start), ('조업 종료', 'end', value.end)):
+                    minutes = st.number_input(f'{label} (분)', min_value=-10080, max_value=10080,
+                                              value=v, step=1, key=f'{prefix}_{key}', disabled=not included)
+                    st.caption(f'{reference_label} {abs(minutes)}분 {"전" if minutes < 0 else "후"}' if minutes else f'{reference_label} 시각')
+                    vals.append(minutes)
+                travel = st.number_input('이동소요 시간 (분)', min_value=0, max_value=20160,
+                                         value=value.reusable-value.end, step=1, key=f'{prefix}_travel',
+                                         disabled=not included, help='조업 종료 후 다음 작업에 투입되기까지 필요한 시간입니다.')
+                st.caption(f'조업 종료 후 {travel}분')
             offsets.append(Offsets(vals[0], vals[1], vals[1]+travel))
+        directions = [direction for direction, included in (('dep', dep_included), ('arr', arr_included)) if included]
+        can_turn = basis == 'actual' and dep_included and arr_included
+        requested_turn = st.session_state.get('quick_turn', initial.quick_turn)
+        requested_limit = st.session_state.get('turn_limit', initial.turn_limit)
+        with quick_turn_panel:
+            turn_menu = st.popover(f'퀵턴 {requested_limit}분' if requested_turn and can_turn else '퀵턴 미적용',
+                                   disabled=not can_turn, key='turn_settings',
+                                   help='실제 (RAMP IN/OUT) 기준에서 출발·도착을 모두 사용할 때 적용합니다.')
+            with turn_menu:
+                quick_turn = st.checkbox('퀵턴 반영', value=initial.quick_turn, key='quick_turn', disabled=not can_turn)
+                turn_limit = st.number_input('제한시간 (분)', min_value=1, max_value=360,
+                                             value=initial.turn_limit, step=1, key='turn_limit', disabled=not quick_turn or not can_turn)
+                if quick_turn:
+                    st.caption(f'RAMP IN ~ RAMP OUT {turn_limit}분 이내 · REG·SPOT 일치')
+                    st.caption('대기시간도 같은 조가 연속 점유하며, 마지막 출발편 이동시간만 적용합니다.')
+    refresh_action = st.container(key='refresh_action')
 
 settings = None
+validation_error = None
 invalid_offsets = []
 for direction, name, value in zip(('dep', 'arr'), ('출발편', '도착편'), offsets):
     if direction not in directions:
@@ -232,18 +239,58 @@ try:
     if dict(st.query_params) != params:
         st.query_params.from_dict(params)
 except ValueError as exc:
-    if invalid_offsets:
-        st.warning(str(exc))
-    else:
-        st.error(str(exc))
+    validation_error = (invalid_offsets, str(exc))
     settings = None
 
 busy = 'job' in st.session_state
 with actions:
-    refresh = st.button('새로 조회', key='refresh_data', width=180, disabled=not settings or busy,
-                        help='캐시를 사용하지 않고 현재 입력 조건의 운항자료를 다시 수집해 분석합니다.')
-    run = st.button('분석 실행', key='run_analysis', type='primary', width=180, disabled=not settings or busy,
+    run = st.button('위 조건으로 분석', key='run_analysis', type='primary', width='stretch', disabled=not settings or busy,
                     help='유효한 캐시를 활용하고, 없거나 만료된 자료는 조회해 분석합니다.')
+with action_summary:
+    chips = ''
+    if settings:
+        airport_name, _ = AIRPORTS[settings.airport]
+        if settings.mode == 'month':
+            period_label = f'{settings.start.year}년 {settings.start.month}월'
+        elif settings.start.year == settings.end.year:
+            period_label = f'{settings.start.year}-{settings.start:%m/%d}–{settings.end:%m/%d}'
+        else:
+            period_label = f'{settings.start:%Y/%m/%d}–{settings.end:%Y/%m/%d}'
+        direction_label = '출발·도착' if settings.directions == ('dep', 'arr') else ('출발' if settings.directions == ('dep',) else '도착')
+        basis_label = 'STA/STD 기준' if settings.basis == 'scheduled' else 'RAMP IN/OUT 기준'
+        conditions = (
+            ('airport', airport_name),
+            ('period', period_label),
+            ('detail', "/".join(settings.airlines)),
+            ('detail', basis_label),
+            ('detail', f'{settings.interval}분'),
+            ('detail', direction_label),
+        )
+        def condition_chips(conditions):
+            return ''.join(
+                f'<span class="analysis-condition-chip analysis-condition-chip--{kind}">{escape(label)}</span>'
+                for kind, label in conditions
+            )
+
+        chips = condition_chips(conditions)
+    st.html(
+        '<div class="analysis-condition-row">'
+        '<h2 class="analysis-launch-title">분석 조건</h2>'
+        f'<div class="analysis-condition-chips">{chips}</div>'
+        '</div>'
+    )
+    st.divider()
+with action_feedback:
+    if validation_error:
+        invalid, message = validation_error
+        if invalid:
+            st.warning(message)
+        else:
+            st.error(message)
+with refresh_action:
+    st.divider()
+    refresh = st.button('운항자료 재조회 및 분석', key='refresh_data', width='stretch', disabled=not settings or busy,
+                        help='캐시를 사용하지 않고 현재 입력 조건의 운항자료를 다시 수집해 분석합니다.')
 
 if run or refresh:
     st.session_state.pop('completed_result_id', None)
@@ -298,7 +345,7 @@ if os.getenv('CREW_DEMO') == '1' and 'result' not in st.session_state and settin
 
 result = st.session_state.get('result')
 if result is None:
-    st.info('조건을 선택하고 분석 실행을 누르세요. 분석은 최대 31개 운영일까지 가능합니다.')
+    st.info('조건을 선택하고 위 조건으로 분석을 누르세요. 분석은 최대 31개 운영일까지 가능합니다.')
     display_help()
     st.stop()
 
@@ -310,7 +357,7 @@ if (not dirty and 'job' not in st.session_state and not st.session_state.get('jo
         and st.session_state.get('completed_result_id') == result.result_id):
     st.success('분석이 완료되었습니다. 아래에서 결과를 확인하세요.')
 if dirty:
-    st.info('입력 조건이 변경되었습니다. 아래는 이전 조회 결과입니다. 새 조건을 적용하려면 분석 실행을 누르세요.')
+    st.info('입력 조건이 변경되었습니다. 아래는 이전 조회 결과입니다. 새 조건을 적용하려면 위 조건으로 분석을 누르세요.')
 name, iata = AIRPORTS[applied.airport]
 if applied.directions != ('dep', 'arr'):
     st.caption(f'분석 대상: {applied.direction_label}')
