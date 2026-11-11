@@ -11,7 +11,7 @@ def fmt(value):
 
 
 def frame(flights):
-    return pd.DataFrame([{
+    table = pd.DataFrame([{
         '방향': '출발' if f.direction == 'dep' else '도착', '편명': flight_label(f.flight_id),
         '출도착지': icao_to_iata(f.route),
         'STA/STD': f.scheduled.strftime('%H:%M') if f.scheduled else '—',
@@ -19,6 +19,8 @@ def frame(flights):
         '조업 시작': fmt(f.start), '조업 종료': fmt(f.end),
         '후속 조업 가능': fmt(f.reusable),
     } for f in flights])
+    table.insert(0, '순번', range(1, len(table) + 1))
+    return table
 
 
 def job_frame(jobs):
@@ -41,7 +43,9 @@ def job_frame(jobs):
                      else '원본 실제 날짜'),
             '연결 판단': job.note,
         })
-    return pd.DataFrame(rows)
+    table = pd.DataFrame(rows)
+    table.insert(0, '순번', range(1, len(table) + 1))
+    return table
 
 
 def display(result, index):
