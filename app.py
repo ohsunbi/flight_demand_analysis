@@ -22,12 +22,15 @@ from ui.url_state import decode, encode
 
 st.set_page_config(page_title='시간대별 램프조업 수요 분석', page_icon='✈', layout='wide')
 st.markdown('''<style>
-.block-container {padding-top:1.4rem; max-width:1800px}
+.block-container {padding-top:1.9rem; max-width:1800px}
 .app-header {margin:0 0 8px}
 .app-header-eyebrow {margin:0 0 2px 20px; color:#8b8580; font-size:.68rem; line-height:1.2; letter-spacing:.04em}
 .app-header-title {display:flex; align-items:center; gap:20px}
 .app-header-title::before {content:""; flex:0 0 4px; height:clamp(28px,3vw,40px); background:#f15922; border-radius:2px}
-.app-header h1 {margin:0; padding:0; color:#242424; font-size:clamp(1.45rem,2.1vw,2rem); line-height:1.25; font-weight:700; letter-spacing:-.035em; word-break:keep-all; overflow-wrap:anywhere}
+.app-header h1 {margin:0; padding:0; color:#242424; font-size:clamp(1.3rem,1.8vw,1.8rem); line-height:1.25; font-weight:700; letter-spacing:-.035em; word-break:keep-all; overflow-wrap:anywhere}
+@media (min-width:1501px) {
+  .st-key-target_group, .st-key-period_group {box-sizing:border-box; padding-right:12px}
+}
 @media (max-width:640px) {
   .app-header-title {gap:14px}
   .app-header-eyebrow {margin-left:18px}
@@ -189,13 +192,13 @@ with settings_panel:
         directions = []
         with direction_col, st.container(key='direction_time_rows'):
             st.html('<h2 class="settings-section-title">조업 조건</h2>')
-            _, start_header, end_header, travel_header = st.columns([.75, 1, 1, 1], gap='small')
+            _, start_header, end_header, travel_header = st.columns([1.05, 1, 1, 1], gap='small')
             start_header.html('<p class="work-time-label">조업 시작</p>')
             end_header.html('<p class="work-time-label">조업 종료</p>')
             travel_header.html('<p class="work-time-label">이동소요 시간</p>')
             for name, value, prefix in zip(['출발', '도착'], [initial.dep, initial.arr], ['dep', 'arr']):
                 with st.container(key=f'{prefix}_settings_row'):
-                    heading_col, start_col, end_col, travel_col = st.columns([.75, 1, 1, 1], gap='small')
+                    heading_col, start_col, end_col, travel_col = st.columns([1.05, 1, 1, 1], gap='small')
                     with heading_col, st.container(horizontal=True, vertical_alignment='center', key=f'{prefix}_direction_choice'):
                         st.html(f'<span class="work-time-direction">{name}편</span>', width='content')
                         included = st.checkbox('사용', value=prefix in initial.directions, key=f'{prefix}_included', label_visibility='collapsed')
@@ -214,7 +217,7 @@ with settings_panel:
                     reference_label = ('STD' if prefix == 'dep' else 'STA') if basis == 'scheduled' else ('RAMP OUT' if prefix == 'dep' else 'RAMP IN')
                     start_hint = f'{reference_label} {abs(vals[0])}분 {"전" if vals[0] < 0 else "후"}' if vals[0] else f'{reference_label} 시각'
                     end_hint = f'{reference_label} {abs(vals[1])}분 {"전" if vals[1] < 0 else "후"}' if vals[1] else f'{reference_label} 시각'
-                    _, hint_text = st.columns([.75, 3], gap='small')
+                    _, hint_text = st.columns([1.05, 3], gap='small')
                     with hint_text:
                         st.caption(f'{start_hint} · {end_hint} · 조업 종료 후 {travel}분')
                     offsets.append(Offsets(vals[0], vals[1], vals[1]+travel))
