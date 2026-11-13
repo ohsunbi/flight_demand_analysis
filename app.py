@@ -147,7 +147,7 @@ with settings_panel:
                 with st.container(width='content'):
                     inline_label('공항')
                     airport = st.selectbox('공항', list(AIRPORTS), index=list(AIRPORTS).index(initial.airport),
-                                           format_func=lambda x: f'{AIRPORTS[x][0]} · {AIRPORTS[x][1] or x} ({x})',
+                                           format_func=lambda x: f'{AIRPORTS[x][0]} · {AIRPORTS[x][1] or x}',
                                            key='airport', width='stretch', on_change=airport_changed,
                                            label_visibility='collapsed')
                 try:
@@ -167,7 +167,7 @@ with settings_panel:
                     code_help.append('항공사 코드를 입력·확인하세요.')
                 with st.container(width='content'):
                     inline_label('항공사 코드')
-                    codes = st.text_input('항공사 코드 (ICAO 3자리)', value=None, placeholder='JJA, TTW, AXM',
+                    codes = st.text_input('항공사 코드 (ICAO 3자리)', value=None, placeholder='예시: JJA',
                                           key='codes', width='stretch', help='\n\n'.join(code_help),
                                           label_visibility='collapsed')
         with st.container(key='period_group', horizontal=True, vertical_alignment='top', gap='small', width='content'):
@@ -178,11 +178,11 @@ with settings_panel:
                                 horizontal=True, key='mode', label_visibility='collapsed', width='content')
             if mode == 'month':
                 with st.container(horizontal=True, vertical_alignment='top', width='content', gap='small'):
-                    with st.container(width='content'):
+                    with st.container(width=90):
                         inline_label('연도')
                         year = st.number_input('연도', min_value=2000, max_value=2100, value=initial.start.year,
                                                step=1, key='year', label_visibility='collapsed', width='stretch')
-                    with st.container(width=90):
+                    with st.container(width=80):
                         inline_label('월')
                         month = st.selectbox('월', list(range(1, 13)), index=initial.start.month-1,
                                              key='month', label_visibility='collapsed', width='stretch')
@@ -197,17 +197,38 @@ with settings_panel:
                     start, end = (dates[0], dates[-1]) if len(dates) == 2 else (None, None)
         with st.container(key='basis_group', horizontal=True, vertical_alignment='top', gap='medium', width='content'):
             with st.container(width='content'):
+                inline_label('분석 간격')
+                interval = st.radio('분석 간격', [60, 30], index=0 if initial.interval == 60 else 1,
+                                    format_func=lambda x: f'{x}분', horizontal=True, key='interval',
+                                    label_visibility='collapsed', width='content')
+            with st.container(width='content'):
                 inline_label('분석 기준')
                 basis = st.radio('분석 기준시각', ['scheduled', 'actual'],
                                  index=0 if initial.basis == 'scheduled' else 1,
                                  format_func=lambda x: 'STA/STD' if x == 'scheduled' else 'RAMP IN/OUT',
                                  horizontal=True, key='basis', label_visibility='collapsed',
                                  help='RAMP IN/OUT 시각이 없으면 STA/STD 시각을 사용합니다.', width='content')
+            quick_turn_available = (
+                basis == 'actual'
+                and st.session_state.get('dep_included', 'dep' in initial.directions)
+                and st.session_state.get('arr_included', 'arr' in initial.directions)
+            )
+            requested_turn = st.session_state.get('quick_turn', initial.quick_turn)
+            requested_limit = st.session_state.get('turn_limit', initial.turn_limit)
             with st.container(width='content'):
-                inline_label('분석 간격')
-                interval = st.radio('분석 간격', [60, 30], index=0 if initial.interval == 60 else 1,
-                                    format_func=lambda x: f'{x}분', horizontal=True, key='interval',
-                                    label_visibility='collapsed', width='content')
+                inline_label('퀵턴')
+                turn_menu = st.popover(f'{requested_limit}분' if requested_turn and quick_turn_available else '미적용',
+                                       disabled=not quick_turn_available, key='turn_settings',
+                                       help='RAMP IN/OUT 기준에서 출발·도착을 모두 사용할 때 적용합니다.')
+                with turn_menu:
+                    quick_turn = st.checkbox('퀵턴 반영', value=initial.quick_turn, key='quick_turn',
+                                             disabled=not quick_turn_available)
+                    turn_limit = st.number_input('제한시간 (분)', min_value=1, max_value=360,
+                                                 value=initial.turn_limit, step=1, key='turn_limit',
+                                                 disabled=not quick_turn or not quick_turn_available)
+                    if quick_turn:
+                        st.caption(f'조건: RAMP IN ~ RAMP OUT {turn_limit}분 이내 · REG·SPOT 일치')
+                        st.caption('적용 계산: 대기시간 포함 연속 점유 · 출발편 이동시간만 적용')
     offsets = []
     directions = []
     with st.container(key='condition_row', horizontal=True, vertical_alignment='center', gap='small'):
@@ -221,14 +242,14 @@ with settings_panel:
                     vals = []
                     reference_label = ('STD' if prefix == 'dep' else 'STA') if basis == 'scheduled' else ('RAMP OUT' if prefix == 'dep' else 'RAMP IN')
                     for label, key, v in zip(['조업 시작', '조업 종료'], ['start', 'end'], [value.start, value.end]):
-                        with st.container(width=130):
+                        with st.container(width=125):
                             inline_label(f'{label} (분)')
                             minutes = st.number_input(f'{name}편 {label}', min_value=-10080, max_value=10080,
                                                       value=v, step=1, key=f'{prefix}_{key}', label_visibility='collapsed',
                                                       disabled=not included, help=f'{reference_label} 대비 조업 {label} 시각(분)입니다.',
                                                       width='stretch')
                         vals.append(minutes)
-                    with st.container(width=130):
+                    with st.container(width=125):
                         inline_label('이동소요 (분)')
                         travel = st.number_input(f'{name}편 이동소요 시간 (분)', min_value=0, max_value=20160,
                                                  value=value.reusable-value.end, step=1, key=f'{prefix}_travel',
@@ -240,9 +261,6 @@ with settings_panel:
                 offsets.append(Offsets(vals[0], vals[1], vals[1]+travel))
         actions = st.container(key='analysis_actions', width='content')
 
-can_turn = (basis == 'actual' and 'dep' in directions and 'arr' in directions)
-requested_turn = st.session_state.get('quick_turn', initial.quick_turn)
-requested_limit = st.session_state.get('turn_limit', initial.turn_limit)
 with st.expander('추가 설정', expanded=False):
     with st.container(key='additional_panel'):
         with st.container(key='additional_settings_row', horizontal=True,
@@ -254,19 +272,6 @@ with st.expander('추가 설정', expanded=False):
                                   format_func=lambda v: f'{v//60:02d}:{v%60:02d}', key='day_start', width='stretch',
                                   label_visibility='collapsed',
                                   help='한국시간 기준, 선택한 시각부터 24시간을 하루로 집계합니다. 예: 06:00부터 다음 날 06:00까지. 기존 URL의 분 단위 값은 그대로 복원합니다.')
-            with st.container(width='content'):
-                inline_label('퀵턴 적용')
-                turn_menu = st.popover(f'퀵턴 {requested_limit}분' if requested_turn and can_turn else '퀵턴 미적용',
-                                       disabled=not can_turn, key='turn_settings',
-                                       help='RAMP IN/OUT 기준에서 출발·도착을 모두 사용할 때 적용합니다.')
-                with turn_menu:
-                    quick_turn = st.checkbox('퀵턴 반영', value=initial.quick_turn, key='quick_turn', disabled=not can_turn)
-                    turn_limit = st.number_input('제한시간 (분)', min_value=1, max_value=360,
-                                                 value=initial.turn_limit, step=1, key='turn_limit',
-                                                 disabled=not quick_turn or not can_turn)
-                    if quick_turn:
-                        st.caption(f'조건: RAMP IN ~ RAMP OUT {turn_limit}분 이내 · REG·SPOT 일치')
-                        st.caption('적용 계산: 대기시간 포함 연속 점유 · 출발편 이동시간만 적용')
             with st.container(width=220):
                 refresh_slot = st.empty()
 
