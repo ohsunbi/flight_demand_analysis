@@ -69,6 +69,9 @@ def _figure(result, col_start, col_end):
     airlines=', '.join(to_iata_codes(s.airlines)) if s.airlines else '전체 항공사'
     scope = f' | 분석 대상 : {s.direction_label}' if s.directions != ('dep', 'arr') else ''
     airline_lines=textwrap.wrap(f'{airport}{scope} | 항공사 : {airlines}',width=55)
+    if result.source_mode != 'site':
+        source_label = '엑셀' if result.source_mode == 'excel' else 'UBIKAIS + 엑셀 (엑셀편 STA/STD)'
+        airline_lines.append(f'자료: {source_label}')
     if s.quick_turn_active:
         airline_lines.append(f'퀵턴 {s.turn_limit}분 이내 | 대기 연속 점유 | 연결 시 출발편 이동시간 적용')
     for i,line in enumerate(airline_lines):

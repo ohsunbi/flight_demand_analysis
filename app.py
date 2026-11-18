@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import calendar
+import hashlib
 import os
 from dataclasses import asdict
 from datetime import date, datetime
@@ -8,12 +9,14 @@ from datetime import date, datetime
 import pandas as pd
 import streamlit as st
 
-from config import AIRPORTS, airport_airlines
+from config import AIRPORTS, ROOT, airport_airlines
 from config.airline_codes import ICAO_TO_IATA, parse_icao_codes, to_iata_codes
 from domain.models import KST, Offsets, Settings
 from engine.demand import half_day_peaks
 from services.analysis import Job, load_contract
+from adapters.excel_schedule import MAX_UPLOAD_MB, read_schedule
 from adapters.ubikais_client import UbikaisClient
+from services.excel_schedule import excel_overlaps, select_excel
 from services.planner import plan
 from ui import details, heatmap
 from ui.summary import occurrence_dates
@@ -36,9 +39,47 @@ st.markdown('''<style>
 [data-testid="stSidebar"] {background:#f7f5f3}
 .st-key-analysis_settings [data-testid="stVerticalBlock"] {gap:.35rem}
 .st-key-analysis_settings hr {margin:.2rem 0}
-.inline-field-label {color:#5f5a56; font-size:.78rem; font-weight:500; white-space:nowrap}
+.inline-field-label,
+:is(.st-key-dep_direction_toggle, .st-key-arr_direction_toggle) [data-testid="stCheckbox"] p {
+  color:#5f5a56; font-size:.78rem; font-weight:500; line-height:1.5; white-space:nowrap;
+}
 .inline-direction-label {color:#242424; font-size:.88rem; font-weight:600; white-space:nowrap}
 .st-key-filter_row [data-testid="stHorizontalBlock"] {align-items:flex-start; gap:.8rem}
+.st-key-filter_row [data-testid="stButtonGroup"] [role="radiogroup"] {
+  gap:2px;
+  padding:3px;
+  background:#f1f0ee;
+  border-radius:8px;
+}
+.st-key-filter_row [data-testid="stButtonGroup"] button {
+  min-height:34px;
+  margin:0;
+  border:1px solid transparent !important;
+  border-radius:6px !important;
+  background:transparent !important;
+  color:#52525b !important;
+  box-shadow:none !important;
+}
+.st-key-filter_row [data-testid="stButtonGroup"] button:not(:disabled):hover {
+  background:#e7e5e2 !important;
+  color:#27272a !important;
+}
+.st-key-filter_row [data-testid="stButtonGroup"] button[kind="segmented_controlActive"] {
+  border-color:#d4d4d8 !important;
+  background:#fff !important;
+  color:#27272a !important;
+  font-weight:600;
+}
+.st-key-filter_row [data-testid="stButtonGroup"] button:focus-visible {
+  outline:2px solid #52525b !important;
+  outline-offset:-2px;
+}
+.st-key-filter_row [data-testid="stButtonGroup"] button:disabled {
+  opacity:.65;
+}
+@media (min-width:1301px) {
+  .st-key-condition_row {column-gap:1.35rem}
+}
 .st-key-condition_row [data-testid="stLayoutWrapper"]:has(.st-key-dep_group),
 .st-key-condition_row [data-testid="stLayoutWrapper"]:has(.st-key-arr_group),
 .st-key-dep_group, .st-key-arr_group {flex:0 0 auto !important; width:fit-content !important}
@@ -46,6 +87,35 @@ st.markdown('''<style>
 .st-key-arr_group [data-testid="stHorizontalBlock"] {gap:.5rem !important}
 .st-key-dep_direction_toggle,
 .st-key-arr_direction_toggle {box-sizing:border-box; padding-inline:.5rem !important}
+:is(.st-key-dep_direction_toggle, .st-key-arr_direction_toggle) [data-baseweb="checkbox"] {align-items:center}
+:is(.st-key-dep_direction_toggle, .st-key-arr_direction_toggle) [data-testid="stCheckbox"] p {margin:0}
+:is(.st-key-dep_direction_toggle, .st-key-arr_direction_toggle) [data-baseweb="checkbox"] > span:has(+ input[type="checkbox"]) {
+  position:relative;
+  top:0;
+  margin-top:0;
+  border-color:#a8a29e;
+  background-color:#fff;
+}
+:is(.st-key-dep_direction_toggle, .st-key-arr_direction_toggle) [data-baseweb="checkbox"] > span:has(+ input[type="checkbox"]:checked) {
+  background-color:#f7f5f3;
+  background-image:none;
+}
+:is(.st-key-dep_direction_toggle, .st-key-arr_direction_toggle) [data-baseweb="checkbox"] > span:has(+ input[type="checkbox"]:checked)::after {
+  content:"";
+  position:absolute;
+  top:44%;
+  left:50%;
+  width:5px;
+  height:8px;
+  border:solid #5f5a56;
+  border-width:0 1.5px 1.5px 0;
+  transform:translate(-50%, -50%) rotate(45deg);
+}
+:is(.st-key-dep_direction_toggle, .st-key-arr_direction_toggle) [data-baseweb="checkbox"] > span:has(+ input[type="checkbox"]:focus-visible) {
+  outline:2px solid #52525b;
+  outline-offset:2px;
+  box-shadow:none;
+}
 .st-key-condition_row [data-testid="stLayoutWrapper"]:has(.st-key-analysis_actions) {margin-left:auto !important}
 .st-key-condition_row [data-testid="stElementContainer"]:has([data-testid="stNumberInput"]) {flex-grow:0 !important; min-width:0 !important}
 .st-key-analysis_actions {width:auto !important; min-width:200px; max-width:280px; margin:0 0 0 auto !important; display:flex !important; flex-direction:column; align-items:stretch; gap:.4rem !important}
@@ -113,6 +183,12 @@ initial = st.session_state.initial
 if 'codes' not in st.session_state:
     st.session_state.codes = ', '.join(initial.airlines)
 contract = load_contract()
+COLLECTION_LABELS = {
+    'site': 'UBIKAIS만 사용',
+    'site_excel': 'UBIKAIS + 엑셀',
+    'excel': '엑셀만 사용',
+}
+excel_only = st.session_state.get('collection_mode') == 'excel'
 
 st.html('''<header class="app-header">
 <div class="app-header-eyebrow">RAMP HANDLING / RESOURCE PLANNING</div>
@@ -120,7 +196,7 @@ st.html('''<header class="app-header">
 </header>''')
 if st.session_state.get('url_error'):
     st.warning(st.session_state.url_error)
-if not contract.verified:
+if not contract.verified and not excel_only:
     st.warning('UBIKAIS 데이터 계약 검증 중입니다. 실자료 조회는 잠정 분석으로 표시되며 정식 보고서 출력은 제한됩니다.')
 
 def airport_changed():
@@ -173,9 +249,9 @@ with settings_panel:
         with st.container(key='period_group', horizontal=True, vertical_alignment='top', gap='small', width='content'):
             with st.container(width='content'):
                 inline_label('기간 선택')
-                mode = st.radio('기간 선택', ['month', 'custom'], index=0 if initial.mode == 'month' else 1,
-                                format_func=lambda x: '월별' if x == 'month' else '사용자 지정',
-                                horizontal=True, key='mode', label_visibility='collapsed', width='content')
+                mode = st.segmented_control('기간 선택', ['month', 'custom'], default=initial.mode,
+                                            format_func=lambda x: '월별' if x == 'month' else '사용자 지정',
+                                            required=True, key='mode', label_visibility='collapsed', width='content')
             if mode == 'month':
                 with st.container(horizontal=True, vertical_alignment='top', width='content', gap='small'):
                     with st.container(width=90):
@@ -198,16 +274,23 @@ with settings_panel:
         with st.container(key='basis_group', horizontal=True, vertical_alignment='top', gap='medium', width='content'):
             with st.container(width='content'):
                 inline_label('분석 간격')
-                interval = st.radio('분석 간격', [60, 30], index=0 if initial.interval == 60 else 1,
-                                    format_func=lambda x: f'{x}분', horizontal=True, key='interval',
-                                    label_visibility='collapsed', width='content')
+                interval = st.segmented_control('분석 간격', [60, 30], default=initial.interval,
+                                                format_func=lambda x: f'{x}분', required=True, key='interval',
+                                                label_visibility='collapsed', width='content')
             with st.container(width='content'):
                 inline_label('분석 기준')
-                basis = st.radio('분석 기준시각', ['scheduled', 'actual'],
-                                 index=0 if initial.basis == 'scheduled' else 1,
-                                 format_func=lambda x: 'STA/STD' if x == 'scheduled' else 'RAMP IN/OUT',
-                                 horizontal=True, key='basis', label_visibility='collapsed',
-                                 help='RAMP IN/OUT 시각이 없으면 STA/STD 시각을 사용합니다.', width='content')
+                if excel_only:
+                    basis = st.segmented_control('분석 기준시각', ['scheduled'], default='scheduled',
+                                                 format_func=lambda _: 'STA/STD', required=True, disabled=True,
+                                                 key='basis_excel', label_visibility='collapsed', width='content')
+                else:
+                    preferred_basis = st.session_state.get('site_basis_preference', initial.basis)
+                    basis = st.segmented_control('분석 기준시각', ['scheduled', 'actual'], default=preferred_basis,
+                                                 format_func=lambda x: 'STA/STD' if x == 'scheduled' else 'RAMP IN/OUT',
+                                                 required=True, key='basis', label_visibility='collapsed',
+                                                 help='RAMP IN/OUT 시각이 없으면 STA/STD 시각을 사용합니다.',
+                                                 width='content')
+                    st.session_state.site_basis_preference = basis
             quick_turn_available = (
                 basis == 'actual'
                 and st.session_state.get('dep_included', 'dep' in initial.directions)
@@ -261,6 +344,7 @@ with settings_panel:
                 offsets.append(Offsets(vals[0], vals[1], vals[1]+travel))
         actions = st.container(key='analysis_actions', width='content')
 
+upload = None
 with st.expander('추가 설정', expanded=False):
     with st.container(key='additional_panel'):
         with st.container(key='additional_settings_row', horizontal=True,
@@ -278,15 +362,22 @@ with st.expander('추가 설정', expanded=False):
         st.divider()
         st.markdown('**운항편 자료 가져오기**')
         source_mode = st.radio('자료 수집 방식', ['site', 'site_excel', 'excel'],
-                               format_func=lambda x: {'site': '외부 사이트 조회',
-                                                      'site_excel': '외부 조회 + 엑셀 추가',
-                                                      'excel': '엑셀만 사용'}[x],
-                               horizontal=True, key='collection_mode')
-        source_ready = source_mode == 'site'
-        if source_ready:
-            st.caption('현재는 외부 사이트 조회를 사용합니다.')
-        else:
-            st.info('선택한 자료 수집 방식은 아직 구현되지 않았습니다.')
+                               format_func=COLLECTION_LABELS.__getitem__, horizontal=True,
+                               key='collection_mode', width='content')
+        if source_mode != 'site':
+            with st.container(width=440, gap='small'):
+                upload = st.file_uploader(
+                    '운항편 엑셀 파일', type=['xlsx'], max_upload_size=MAX_UPLOAD_MB,
+                    key='schedule_upload',
+                    help='- 출발·도착 예정 시각(STD·STA)은 한국시간으로 입력\n'
+                         '- 당일 00:50은 `0050`, 다음 날 00:50은 `0050+1`로 입력\n'
+                         '- `UBIKAIS + 엑셀`에서 같은 편이 있으면 엑셀 예정 시각 우선',
+                )
+                excel_feedback = st.empty()
+                st.download_button('입력 양식 다운로드', (ROOT/'assets'/'schedule_template.xlsx').read_bytes(),
+                                   file_name='schedule_template.xlsx',
+                                   mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                                   on_click='ignore', type='tertiary', icon=':material/download:')
 
 settings = None
 invalid_offsets = []
@@ -305,7 +396,10 @@ try:
     airlines = parse_icao_codes(codes)
     settings = Settings(airport, start, end, mode, airlines, basis, ds, interval, *offsets,
                         directions=tuple(directions), quick_turn=quick_turn, turn_limit=turn_limit)
-    tasks = plan(settings, actual_query_padding_days=(contract.actual_query_padding_days or 0) if basis == 'actual' else 0)
+    if source_mode == 'excel':
+        settings.validate()
+    else:
+        plan(settings, actual_query_padding_days=(contract.actual_query_padding_days or 0) if basis == 'actual' else 0)
     params = encode(settings)
     if dict(st.query_params) != params:
         st.query_params.from_dict(params)
@@ -316,9 +410,38 @@ except ValueError as exc:
         st.error(str(exc))
     settings = None
 
+source_ready = source_mode == 'site' or (source_mode == 'site_excel' and upload is None)
+excel_flights, excel_duplicates, upload_digest = (), 0, ''
+if upload is None:
+    st.session_state.pop('parsed_schedule', None)
+elif upload.size <= MAX_UPLOAD_MB*1024**2:
+    data = upload.getvalue()
+    upload_digest = hashlib.sha256(data).hexdigest()
+    try:
+        saved = st.session_state.get('parsed_schedule')
+        if saved is None or saved[0] != upload_digest:
+            st.session_state.pop('parsed_schedule', None)
+            saved = (upload_digest, read_schedule(data))
+            st.session_state.parsed_schedule = saved
+        if settings is not None:
+            excel_flights, excel_duplicates, excluded = select_excel(saved[1], settings)
+            overlapping = sum(excel_overlaps(f, settings.window) for f in excel_flights)
+            if overlapping == 0 and source_mode == 'excel':
+                excel_feedback.warning('선택한 공항·항공사·방향·기간의 분석 범위와 겹치는 엑셀 운항편이 없습니다.')
+            else:
+                source_ready = True
+                excel_feedback.caption(f'엑셀 입력 {len(saved[1]):,}행 · 공항/방향/항공사 제외 {excluded:,}행 · '
+                                       f'범위 관련 {overlapping:,}편 · 중복 제외 {excel_duplicates:,}건')
+        else:
+            excel_feedback.caption(f'엑셀 입력 {len(saved[1]):,}행을 읽었습니다. 분석 조건을 확인하세요.')
+    except ValueError as exc:
+        excel_feedback.error(str(exc))
+else:
+    excel_feedback.error(f'엑셀 파일은 {MAX_UPLOAD_MB}MB까지 업로드할 수 있습니다.')
+
 busy = 'job' in st.session_state
 refresh = refresh_slot.button('운항편 재조회 및 분석', key='refresh_data', width='stretch',
-                               disabled=not settings or busy or not source_ready,
+                               disabled=not settings or busy or not source_ready or source_mode == 'excel',
                                help='캐시를 사용하지 않고 현재 입력 조건의 운항자료를 다시 수집해 분석합니다.')
 with actions:
     with st.popover('분석조건 보기', type='secondary', width='stretch', key='current_conditions'):
@@ -366,11 +489,11 @@ with actions:
             turn_text = '선택됨 · 현재 기준/방향에서 비활성'
         else:
             turn_text = '미적용'
-        collection_label = {
-            'site': '외부 사이트 조회',
-            'site_excel': '외부 조회 + 엑셀 추가',
-            'excel': '엑셀만 사용',
-        }.get(st.session_state.get('collection_mode', 'site'), '외부 사이트 조회')
+        collection_label = COLLECTION_LABELS[source_mode]
+        if source_mode == 'site_excel' and upload is None:
+            collection_label = 'UBIKAIS만 사용 (엑셀 미첨부)'
+        elif source_mode == 'excel' and upload is None:
+            collection_label += ' (엑셀 미첨부)'
         condition_lines.extend([
             '',
             '**추가 설정**',
@@ -380,17 +503,23 @@ with actions:
         ])
         st.markdown('\n'.join(condition_lines))
     run = st.button('분석 실행', key='run_analysis', type='primary', width='stretch', disabled=not settings or busy or not source_ready,
-                    help='유효한 캐시를 활용하고, 없거나 만료된 자료는 조회해 분석합니다.')
+                    help=('업로드한 엑셀 자료로 분석합니다.' if source_mode == 'excel' else
+                          'UBIKAIS 캐시가 없거나 만료되면 자료를 조회합니다.'))
 
 if run or refresh:
     st.session_state.pop('completed_result_id', None)
-    cookie = os.getenv('UBIKAIS_COOKIE')
-    if not cookie:
-        try:
-            cookie = st.secrets.get('UBIKAIS_COOKIE')
-        except (FileNotFoundError, st.errors.StreamlitSecretNotFoundError):
-            cookie = None
-    st.session_state.job = Job(settings, UbikaisClient(cookie=cookie), contract, refresh=refresh)
+    client = None
+    if source_mode != 'excel':
+        cookie = os.getenv('UBIKAIS_COOKIE')
+        if not cookie:
+            try:
+                cookie = st.secrets.get('UBIKAIS_COOKIE')
+            except (FileNotFoundError, st.errors.StreamlitSecretNotFoundError):
+                cookie = None
+        client = UbikaisClient(cookie=cookie)
+    analysis_source_mode = ('site' if source_mode == 'site_excel' and not upload_digest else source_mode)
+    st.session_state.job = Job(settings, client, contract, refresh=refresh, source_mode=analysis_source_mode,
+                               excel_flights=excel_flights, excel_duplicates=excel_duplicates, upload_digest=upload_digest)
     st.rerun()
 
 
@@ -401,7 +530,7 @@ def job_status():
         return
     fraction, message = job.status()
     st.progress(fraction, text=message)
-    if st.button('조회 중단', key='cancel_job'):
+    if st.button('작업 중단' if getattr(job, 'source_mode', 'site') == 'excel' else '조회 중단', key='cancel_job'):
         job.cancel.set()
     if job.future.done():
         try:
@@ -435,14 +564,16 @@ if os.getenv('CREW_DEMO') == '1' and 'result' not in st.session_state and settin
 
 result = st.session_state.get('result')
 if result is None:
-    st.info('조건을 선택하고 분석 실행을 누르세요. 분석은 최대 31개 운영일까지 가능합니다.')
+    st.info('조건을 선택하고 분석 실행을 누르세요. 최대 31일까지 분석이 가능합니다.')
     display_help()
     st.stop()
 
 applied = result.settings
 def direction_count(direction, value):
     return str(value) if direction in applied.directions else '—'
-dirty = settings is None or settings.signature != applied.signature
+analysis_source_mode = ('site' if source_mode == 'site_excel' and not upload_digest else source_mode)
+data_changed = analysis_source_mode != result.source_mode or upload_digest != result.upload_digest
+dirty = settings is None or settings.signature != applied.signature or data_changed
 if (not dirty and 'job' not in st.session_state and not st.session_state.get('job_error')
         and st.session_state.get('completed_result_id') == result.result_id
         and st.session_state.get('completion_toast_result_id') != result.result_id):
@@ -497,7 +628,10 @@ with st.expander('데이터 품질 · 추가 분석'):
         st.write(f'분석 범위 관련 퀵턴 연결 {diag.quick_turn_pairs}건 · 개별 조업 {diag.quick_turn_unpaired}건')
     for message in diag.messages:
         st.write(message)
-    st.caption(f'자료 수집: {result.collected_from:%Y-%m-%d %H:%M:%S} ~ {result.collected_until:%Y-%m-%d %H:%M:%S} KST')
+    if result.source_mode == 'excel':
+        st.caption(f'엑셀 분석: {result.created_at:%Y-%m-%d %H:%M:%S} KST')
+    else:
+        st.caption(f'자료 수집: {result.collected_from:%Y-%m-%d %H:%M:%S} ~ {result.collected_until:%Y-%m-%d %H:%M:%S} KST')
     st.caption(f'자료 버전 {result.data_version or "가상 자료"} · 정규화 v2 / 계산 엔진 v2')
     hist = result.histogram_minutes
     st.dataframe(pd.DataFrame([{'필요 조업조': k, '정확히 해당 조 수 (분)': v,

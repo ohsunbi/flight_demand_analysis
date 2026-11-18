@@ -237,6 +237,8 @@ class Analysis:
     synthetic: bool = False
     data_version: str = ''
     jobs: tuple[HandlingJob, ...] = ()
+    source_mode: str = 'site'
+    upload_digest: str = ''
 
     @property
     def maximum(self):
