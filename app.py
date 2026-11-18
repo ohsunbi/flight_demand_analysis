@@ -582,8 +582,6 @@ if (not dirty and 'job' not in st.session_state and not st.session_state.get('jo
 if dirty:
     st.info('입력 조건이 변경되었습니다. 아래는 이전 조회 결과입니다. 새 조건을 적용하려면 분석 실행을 누르세요.')
 name, iata = AIRPORTS[applied.airport]
-if applied.directions != ('dep', 'arr'):
-    st.caption(f'분석 대상: {applied.direction_label}')
 if result.synthetic:
     st.warning('개발 검증용 가상 데이터입니다. 실제 운항자료가 아닙니다.')
 for blocker in result.blockers:
