@@ -107,7 +107,7 @@ st.markdown('''<style>
   left:50%;
   width:5px;
   height:8px;
-  border:solid #5f5a56;
+  border:solid #c2410c;
   border-width:0 1.5px 1.5px 0;
   transform:translate(-50%, -50%) rotate(45deg);
 }
